@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yahoo-data-deploy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: yahoo-data
+  template:
+    metadata:
+      labels:
+        app: yahoo-data
+    spec:
+      containers:
+        - name: yahoo-data
+          image: ccr.ccs.tencentyun.com/1223/yahoo_data:latest
+          # 若无需端口，删除ports配置
+          # ports:
+          #   - containerPort: 80 
+          env:
+            # LLM API密钥
+            - name: DASHSCOPE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: sk-f49e832b338a4a0f843888e718662cc7
+            # 数据库连接信息
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: db-host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: db-port
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: db-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: db-password
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: db-name
