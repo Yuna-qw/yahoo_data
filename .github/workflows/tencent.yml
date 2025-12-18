@@ -22,6 +22,7 @@ jobs:
         secret_key: ${{ secrets.TENCENT_CLOUD_SECRET_KEY }}
         tke_region: ${{ env.TKE_REGION }}
         cluster_id: ${{ env.TKE_CLUSTER_ID }}
+        cluster_endpoint: https://lb-a7s3xi0c-9nct1ayvz6s32p48.clb.gz-tencentclb.com:443
 
     - name: Deploy to K8S
       run: |
