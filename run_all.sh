@@ -20,4 +20,3 @@ python 5.rag_setup.py
 
 echo "调用大模型..."
 python 6.query_llama_postgres.py
-
