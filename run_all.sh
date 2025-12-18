@@ -3,7 +3,6 @@
 echo "开始下载数据..."
 python 1.yahoo_data_download.py
 
-
 echo "生成视图..."
 python 7.create_view.py
 
