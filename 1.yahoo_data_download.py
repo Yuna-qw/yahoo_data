@@ -228,38 +228,19 @@ def download(data_option=0, use_threads=1, sleep_time=1, repeat=3, download_opti
             os.mkdir('new_csv\\' + country)
 
     print("正在加载数据...")
-    # data 将有三列: 'country', 'Yahoo_adj_Ticker_symbol', 'currently use'
-    data = pd.DataFrame(data=None, index=None, columns=['country', 'Yahoo_adj_Ticker_symbol', 'currently use'],
-                        dtype=object)
-    data_dict = {'country': None, 'Yahoo_adj_Ticker_symbol': None, 'currently use': None}
-
-    # 加载所有数据
+    conn = sqlite3.connect('yahoo_data.db')
+    
     if data_option == 0:
-        data_Shanghai_Shenzhen = pd.read_excel('master_symbol_v1.6_2023.03.xlsx', sheet_name='Shanghai_Shenzhen',
-                                               dtype='object', engine='openpyxl')
-        for i, row in data_Shanghai_Shenzhen.iterrows():
-            data_dict['country'] = 'Shanghai_Shenzhen'
-            data_dict['Yahoo_adj_Ticker_symbol'] = row['Yahoo_adj_Ticker_symbol']
-            data_dict['currently use'] = row['currently use']
-            data.loc[i] = data_dict
-        index = data.index[-1] + 1
-        data_Snp500_Ru1000 = pd.read_excel('master_symbol_v1.6_2023.03.xlsx', sheet_name='Snp500_Ru1000',
-                                           dtype='object', engine='openpyxl')
-        for i, row in data_Snp500_Ru1000.iterrows():
-            data_dict['country'] = 'Snp500_Ru1000'
-            data_dict['Yahoo_adj_Ticker_symbol'] = row['Yahoo_adj_Ticker_symbol']
-            data_dict['currently use'] = row['currently use']
-            data.loc[index] = data_dict
-            index += 1
-
-        data_TSX = pd.read_excel('master_symbol_v1.6_2023.03.xlsx', sheet_name='TSX', dtype='object',
-                                 engine='openpyxl')
-        for i, row in data_TSX.iterrows():
-            data_dict['country'] = 'TSX'
-            data_dict['Yahoo_adj_Ticker_symbol'] = row['Yahoo_adj_Ticker_symbol']
-            data_dict['currently use'] = row['currently use']
-            data.loc[index] = data_dict
-            index += 1
+        # 读全部：包括上海深圳、标普和多伦多
+        data = pd.read_sql("SELECT country, Yahoo_adj_Ticker_symbol, [currently use] FROM master", conn)
+    else:
+        # 读指定的国家
+        sheetname = {1: 'Shanghai_Shenzhen', 2: 'Snp500_Ru1000', 3: 'TSX'}
+        target = sheetname[data_option]
+        data = pd.read_sql(f"SELECT country, Yahoo_adj_Ticker_symbol, [currently use] FROM master WHERE country='{target}'", conn)
+    
+    conn.close()
+    print(f"成功加载 {len(data)} 条任务指令！")
     # 加载指定国家的数据
     else:
         sheetname = {1: 'Shanghai_Shenzhen', 2: 'Snp500_Ru1000', 3: 'TSX'}
@@ -377,4 +358,5 @@ if __name__ == '__main__':
     SAVE_TO_CSV = True  # 是否存储到 CSV 文件
 
     download(data_option, use_threads, sleep_time, repeat, download_method_choice)
+
     print(f"耗时: {time.time() - start_time:.2f}秒")
