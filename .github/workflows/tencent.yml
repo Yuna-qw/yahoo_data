@@ -30,4 +30,4 @@ jobs:
           --server=https://150.158.196.175:443 \
           --insecure-skip-tls-verify \
           --validate=false \
-          --request-timeout=1m
+          --request-timeout=5m
