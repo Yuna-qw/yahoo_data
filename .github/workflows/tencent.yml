@@ -27,7 +27,7 @@ jobs:
     - name: Deploy to K8S
       run: |
         kubectl apply -f deployment.yml \
-          --server=https://lb-a7s3xi0c-9nct1ayvz6s32p48.clb.gz-tencentclb.com:443 \
+          --server=https://150.158.196.175:443 \
           --insecure-skip-tls-verify \
           --validate=false \
-          --request-timeout=60s
+          --request-timeout=1m
