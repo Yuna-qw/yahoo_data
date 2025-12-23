@@ -13,8 +13,9 @@ spec:
         app: yahoo-data
     spec:
       containers:
-        - name: yahoo-data
-          image: ccr.ccs.tencentyun.com/1223/yahoo_data:latest
+        - name: hello
+          image: busybox
+          command: ["/bin/sh", "-c", "while true; do echo 'Hello Boss! System is Working!'; sleep 10; done"]
           # 若无需端口，删除ports配置
           # ports:
           #   - containerPort: 80 
