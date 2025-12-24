@@ -20,7 +20,7 @@ jobs:
 
       - name: 3. 安装下载数据需要的工具
         run: |
-          pip install pandas yfinance requests sqlite3
+          pip install pandas yfinance requests
 
       - name: 4. 开始下数据啦
         run: |
