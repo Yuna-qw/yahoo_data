@@ -30,3 +30,10 @@ jobs:
           --server=https://lb-3qflmbje-oue7lyitv9w34khz.clb.gz-tencentclb.com:443 \
           --insecure-skip-tls-verify \
           --validate=false
+
+    - name: Build and Push Image
+      run: |
+        docker login --username=${{ secrets.TENCENT_REGISTRY_USER }} --password=${{ secrets.TENCENT_REGISTRY_PASSWORD }} ccr.ccs.tencentyun.com
+        docker build -t ccr.ccs.tencentyun.com/1223/yahoo-download:latest .
+    
+        docker push ccr.ccs.tencentyun.com/1223/yahoo-download:latest
