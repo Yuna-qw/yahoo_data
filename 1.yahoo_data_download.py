@@ -1,5 +1,4 @@
 import random
-import threading
 import os
 import time
 import datetime
@@ -8,16 +7,15 @@ import pandas as pd
 import requests
 import yfinance as yf
 from calendar import monthrange
-from util.database_postgresql import save_data_to_db, get_last_date_from_db, create_table_if_not_exists
 
 print(f"yfinance 版本: {yf.__version__}")
 
 # 定义全局变量 fail_download
 fail_download = {'Shanghai_Shenzhen': [], 'Snp500_Ru1000': [], 'TSX': []}
 
-def downloader(ticker, data_name, start_date, end_date, sleep_time=1, repeat=3, option=None, save_to_db=True, save_to_csv=True):
+def downloader(ticker, data_name, start_date, end_date, sleep_time=1, repeat=3, option=None, save_to_csv=True):
     """
-    下载股票数据，支持yfinance和requests两种方式。
+    下载股票数据，仅支持 yfinance 和 requests 两种方式，移除数据库保存功能。
     """
     df_downloaded = None  
 
@@ -25,16 +23,9 @@ def downloader(ticker, data_name, start_date, end_date, sleep_time=1, repeat=3, 
         if option is None or option == 0:
             try:
                 data = yf.Ticker(ticker).history(
-                    period="max",
-                    interval="1d",
-                    start=start_date,
-                    end=end_date,
-                    prepost=False,
-                    actions=False,
-                    auto_adjust=False,
-                    back_adjust=False,
-                    proxy=None,
-                    rounding=False
+                    period="max", interval="1d",
+                    start=start_date, end=end_date,
+                    auto_adjust=False, actions=False
                 )
                 if data is None or data.shape[0] <= 1:
                     print(ticker + ' yfinance returned no data')
@@ -51,11 +42,9 @@ def downloader(ticker, data_name, start_date, end_date, sleep_time=1, repeat=3, 
 
         if (option is None or option == 1) and df_downloaded is None:
             try:
+                # 备选 API 下载逻辑保持不变
                 today = datetime.date.today()
-                if today.month == 1:
-                    target_month, target_year = 12, today.year - 1
-                else:
-                    target_month, target_year = today.month - 1, today.year
+                target_month, target_year = (12, today.year - 1) if today.month == 1 else (today.month - 1, today.year)
                 target_day = monthrange(target_year, target_month)[1]
                 req_end_date = datetime.date(target_year, target_month, target_day)
                 
@@ -102,9 +91,6 @@ def downloader(ticker, data_name, start_date, end_date, sleep_time=1, repeat=3, 
                 time.sleep(sleep_time)
 
     if df_downloaded is not None and df_downloaded.shape[0] > 1:
-        if save_to_db:
-            save_data_to_db(df_downloaded.copy(), ticker, data_name)
-            print(f"DB: {ticker} Successful")
         if save_to_csv:
             os.makedirs(os.path.join('new_csv', data_name), exist_ok=True)
             filepath = os.path.join('new_csv', data_name, f"{ticker}.csv")
@@ -117,15 +103,7 @@ def downloader(ticker, data_name, start_date, end_date, sleep_time=1, repeat=3, 
     fail_download[data_name].append(ticker)
     print(ticker + ' Download Failed')
 
-def active_downloader_threads_count():
-    return sum(1 for t in threading.enumerate() if isinstance(t, threading.Thread) and t.is_alive() and hasattr(t, '_target') and t._target == downloader)
-
-max_threads = 20
-
-def download(data_option=0, use_threads=1, sleep_time=1, repeat=3, download_option_method=None, save_to_db=True, save_to_csv=True):
-    if save_to_db:
-        create_table_if_not_exists()
-
+def download(data_option=0, sleep_time=1, repeat=1, download_option_method=None, save_to_csv=True):
     # 准备目录
     os.makedirs('new_csv', exist_ok=True)
     for country in ['Shanghai_Shenzhen', 'Snp500_Ru1000', 'TSX']:
@@ -134,12 +112,10 @@ def download(data_option=0, use_threads=1, sleep_time=1, repeat=3, download_opti
     print("正在从 SQLite 加载股票清单...")
     try:
         conn = sqlite3.connect('yahoo_data.db')
-        # 根据您的 sqlite 表结构查询数据
         query = "SELECT country, Yahoo_adj_Ticker_symbol, [currently use] FROM master"
         all_data = pd.read_sql(query, conn)
         conn.close()
         
-        # 根据 data_option 筛选数据
         sheet_map = {1: 'Shanghai_Shenzhen', 2: 'Snp500_Ru1000', 3: 'TSX'}
         if data_option in sheet_map:
             target_country = sheet_map[data_option]
@@ -151,52 +127,20 @@ def download(data_option=0, use_threads=1, sleep_time=1, repeat=3, download_opti
         print(f"读取 SQLite 数据库失败: {e}")
         return
 
-    # 日期设置
     start_date = datetime.datetime(1970, 2, 1).date()
-    now = datetime.datetime.now()
-    if now.month == 1:
-        end = datetime.datetime(now.year - 1, 12, monthrange(now.year - 1, 12)[1])
-    else:
-        end = datetime.datetime(now.year, now.month, 1) - datetime.timedelta(days=1)
-    
-    end_date = end
-    endDate = end.strftime('%Y-%m-%d')
-    thread_list = []
+    end_date = datetime.datetime.now() # 这里简化为当前时间
 
     for r in range(repeat):
-        print(f"正在开始第 {3-repeat+1} 轮数据下载")
+        print(f"正在开始第 {r+1} 轮数据下载")
         for index, row in data.iterrows():
             ticker = row['Yahoo_adj_Ticker_symbol']
             data_name = row['country']
             if row['currently use'] != 'yes':
                 continue
 
-            # 检查是否需要更新
-            data_is_up_to_date = False
-            if save_to_db:
-                last_db_date = get_last_date_from_db(ticker)
-                if last_db_date == endDate:
-                    data_is_up_to_date = True
+            downloader(ticker, data_name, start_date, end_date, option=download_option_method, save_to_csv=save_to_csv)
 
-            if data_is_up_to_date:
-                continue
-
-            if use_threads == 1:
-                while active_downloader_threads_count() >= max_threads:
-                    time.sleep(1)
-                t = threading.Thread(target=downloader, args=(ticker, data_name, start_date, end_date),
-                                     kwargs={'option': download_option_method, 'save_to_db': save_to_db, 'save_to_csv': save_to_csv})
-                thread_list.append(t)
-                t.start()
-                time.sleep(sleep_time)
-            else:
-                downloader(ticker, data_name, start_date, end_date, option=download_option_method, save_to_db=save_to_db, save_to_csv=save_to_csv)
-
-        for t in thread_list:
-            t.join()
-        thread_list.clear()
-
-    # 记录失败
+    # 记录失败情况
     record = ''
     for country in ['Shanghai_Shenzhen', 'Snp500_Ru1000', 'TSX']:
         record += f"\n{country}\n失败数量: {len(fail_download[country])}\n" + "\n".join(fail_download[country]) + "\n"
@@ -207,6 +151,5 @@ def download(data_option=0, use_threads=1, sleep_time=1, repeat=3, download_opti
 
 if __name__ == '__main__':
     start_time = time.time()
-    # 0:全部, 1:上海_深圳, 2:标普500_罗素1000, 3:多伦多
-    download(data_option=2, use_threads=0, sleep_time=1, repeat=1, download_option_method=1)
+    download(data_option=2, sleep_time=1, repeat=1, download_option_method=1)
     print(f"总耗时: {time.time() - start_time:.2f}秒")
