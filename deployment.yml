@@ -1,18 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hello-world-test
+  name: yahoo-download-deploy
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: hello-test
+      app: yahoo-download
   template:
     metadata:
       labels:
-        app: hello-test
+        app: yahoo-download
     spec:
       containers:
-        - name: hello
-          image: busybox
-          command: ["/bin/sh", "-c", "while true; do echo 'Hello World!'; sleep 10; done"]
+        - name: yahoo-download-container
+          image: ccr.ccs.tencentyun.com/1223/yahoo-download:latest
+          # 确保每次启动都拉取最新镜像，防止代码更新了但容器没变
+          imagePullPolicy: Always
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
