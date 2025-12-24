@@ -112,7 +112,7 @@ def download(data_option=0, sleep_time=1, repeat=1, download_option_method=None,
     print("正在从 SQLite 加载股票清单...")
     try:
         conn = sqlite3.connect('yahoo_data.db')
-        query = "SELECT Yahoo_adj_Ticker_symbol FROM Snp500_Ru1000"
+        query = "SELECT Yahoo_adj_Ticker_symbol FROM master"
         df = pd.read_sql(query, conn)
         conn.close()
         
@@ -153,5 +153,6 @@ if __name__ == '__main__':
     start_time = time.time()
     download(data_option=2, sleep_time=1, repeat=1, download_option_method=1)
     print(f"总耗时: {time.time() - start_time:.2f}秒")
+
 
 
