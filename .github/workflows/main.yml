@@ -1,25 +1,27 @@
-name: Deploy Stock Downloader
+name: Stock Data Auto Download
 
 on:
   push:
     branches: [ main ]
+  schedule:
+    - cron: '0 0 * * *'
 
 jobs:
-  deploy:
+  run-download:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: 1. 获取最新代码
         uses: actions/checkout@v3
 
-      - name: Set up TKE Credential
-        uses: tencentcloud_actions/tke-credentials-action@v1
+      - name: 2. 安装 Python 环境
+        uses: actions/setup-python@v4
         with:
-          secret_id: ${{ secrets.TENCENT_CLOUD_SECRET_ID }}
-          secret_key: ${{ secrets.TENCENT_CLOUD_SECRET_KEY }}
-          tke_region: ap-guangzhou
-          tke_cluster_id: cls-4m9d09vg
+          python-version: '3.9'
 
-      - name: Run Python Script Directly
+      - name: 3. 安装下载工具
         run: |
-          pip install pandas yfinance requests sqlite3
+          pip install pandas yfinance requests yfinance==0.2.40 sqlite3
+
+      - name: 4. 开始执行下载脚本
+        run: |
           python 1.yahoo_data_download.py
