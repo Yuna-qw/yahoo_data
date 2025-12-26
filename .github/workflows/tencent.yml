@@ -7,48 +7,66 @@ on:
 env:
   TKE_REGION: ap-guangzhou
   TKE_CLUSTER_ID: cls-4m9d09vg
+  # 统一变量名，避免后续引用出错
+  TENCENT_SECRET_ID: ${{ secrets.TENCENT_CLOUD_SECRET_ID }}
+  TENCENT_SECRET_KEY: ${{ secrets.TENCENT_CLOUD_SECRET_KEY }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    # 1. 拉取代码
     - name: Checkout
       uses: actions/checkout@v4
 
+    # 2. 安装依赖工具（jq、tccli）
+    - name: Install dependencies (jq + TencentCloud CLI)
+      run: |
+        # 更新apt源并安装jq
+        sudo apt-get update
+        sudo apt-get install -y jq
+        # 下载并安装腾讯云CLI二进制文件（避免脚本乱码）
+        curl -o /usr/local/bin/tccli https://cli.cloud.tencent.com/tencentcloud-cli/latest/ubuntu/amd64/tccli
+        chmod +x /usr/local/bin/tccli
+        # 配置腾讯云CLI密钥和地域
+        tccli configure set --secret-id ${{ env.TENCENT_SECRET_ID }} --secret-key ${{ env.TENCENT_SECRET_KEY }} --region ${{ env.TKE_REGION }}
+
+    # 3. 登录腾讯云镜像仓库
+    - name: Login to Tencent Cloud Registry
+      run: |
+        # 获取镜像仓库登录Token
+        LOGIN_INFO=$(tccli ccr GetRegistryLoginToken --region ${{ env.TKE_REGION }} --output json)
+        # 解析登录信息
+        REGISTRY_DOMAIN=$(echo $LOGIN_INFO | jq -r '.Data.RegistryDomain // empty')
+        USERNAME=$(echo $LOGIN_INFO | jq -r '.Data.Username // empty')
+        TOKEN=$(echo $LOGIN_INFO | jq -r '.Data.Token // empty')
+        # 非交互式登录Docker
+        if [ -n "$REGISTRY_DOMAIN" ] && [ -n "$USERNAME" ] && [ -n "$TOKEN" ]; then
+          echo $TOKEN | docker login $REGISTRY_DOMAIN --username $USERNAME --password-stdin
+        else
+          echo "Failed to get registry login info"
+          exit 1
+        fi
+
+    # 4. 获取TKE集群凭证
     - name: Set up TKE Credential
       uses: TencentCloud/tke-cluster-credential-action@v1
       with:
-        secret_id: ${{ secrets.TENCENT_CLOUD_SECRET_ID }}
-        secret_key: ${{ secrets.TENCENT_CLOUD_SECRET_KEY }}
+        secret_id: ${{ env.TENCENT_SECRET_ID }}
+        secret_key: ${{ env.TENCENT_SECRET_KEY }}
         tke_region: ${{ env.TKE_REGION }}
         cluster_id: ${{ env.TKE_CLUSTER_ID }}
         cluster_endpoint: https://lb-ryliibho-ytlfnz1iuk89rpsb.clb.gz-tencentclb.com:443
 
-    - name: Deploy to K8S
+    # 5. 部署到K8s集群
+    - name: Deploy to TKE Cluster
       run: |
+        # 验证kubectl是否可用
+        kubectl version --client
+        # 部署deployment.yml（跳过TLS验证和语法校验，适配测试环境）
         kubectl apply -f deployment.yml \
           --server=https://lb-ryliibho-ytlfnz1iuk89rpsb.clb.gz-tencentclb.com:443 \
           --insecure-skip-tls-verify \
           --validate=false
-
-    - name: 安装工具
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y jq    
-        - name: 配置腾讯云CLI
-          run: |
-            # 下载腾讯云CLI二进制文件（避免脚本安装的乱码问题）
-            curl -o /usr/local/bin/tccli https://cli.cloud.tencent.com/tencentcloud-cli/latest/ubuntu/amd64/tccli
-            chmod +x /usr/local/bin/tccli
-            # 配置密钥和地域
-            tccli configure set --secret-id ${{ secrets.TENCENT_SECRET_ID }} --secret-key ${{ secrets.TENCENT_SECRET_KEY }} --region ap-guangzhou
-        - name: 自动获取镜像仓库登录凭证并登录
-          run: |
-            # 获取登录Token
-            LOGIN_INFO=$(tccli ccr GetRegistryLoginToken --region ap-guangzhou --output json)
-            # 解析出域名、用户名、Token
-            REGISTRY_DOMAIN=$(echo $LOGIN_INFO | jq -r '.Data.RegistryDomain')
-            USERNAME=$(echo $LOGIN_INFO | jq -r '.Data.Username')
-            TOKEN=$(echo $LOGIN_INFO | jq -r '.Data.Token')
-            # 非交互式登录Docker
-            echo $TOKEN | docker login $REGISTRY_DOMAIN --username $USERNAME --password-stdin
+        # 检查部署状态（可选，便于排查问题）
+        kubectl get pods --server=https://lb-ryliibho-ytlfnz1iuk89rpsb.clb.gz-tencentclb.com:443 --insecure-skip-tls-verify
