@@ -17,7 +17,7 @@ jobs:
     - name: 1. 检出代码
       uses: actions/checkout@v4
 
-    - name: 2. 配置腾讯云集群凭证
+    - name: 2. 配置集群凭证
       uses: TencentCloud/tke-cluster-credential-action@v1
       with:
         secret_id: ${{ secrets.TENCENT_CLOUD_SECRET_ID }}
@@ -26,19 +26,11 @@ jobs:
         cluster_id: ${{ env.TKE_CLUSTER_ID }}
         cluster_endpoint: https://lb-ryliibho-ytlfnz1iuk89rpsb.clb.gz-tencentclb.com:443
 
-    - name: 3. 登录云镜像仓库
+    - name: 3. 登录镜像仓库
       run: |
-        # 使用 --password-stdin 彻底解决非交互设备登录报错问题
-        echo "${{ secrets.TCR_TOKEN }}" | docker login ${{ env.REGISTRY_DOMAIN }} --username 100044904888 --password-stdin
+        echo "eyJhbGciOiJSUzI1NiIsImtpZCI6IjM0RVk6WVZYUzpMNk5aOlJDTEY6NzdYNDpIQVlFOks1REw6Vk1SMjpEQkIyOkczVk86TlFBTTpHMlVIIn0.eyJvd25lclVpbiI6IjEwMDA0NDkwNDg4OCIsIm9wZXJhdG9yVWluIjoiMTAwMDQ0OTA0ODg4IiwiZXhwIjoxNzY2NzUzNTE3LCJuYmYiOjE3NjY3NDk5MTcsImlhdCI6MTc2Njc0OTkxN30.Id797C8TVMMdU1M6j3taxYhsWuRaMa8z0Kn_TtO-bQ4m7D593mFCFFH3tIkq62IBFAodk5GwizHJIEq_KlPa_maBselNT_eV4CItQ3vB84lrgGT4kj2HhX2DON-piWnL3abayzjutyl78muJbAQqLsVaHWKAm4oFfuFmGQy9WcoRGUVChjtIGOaZNGD-Le9Nv0IaKLLwFpmEc5UfUv891KAimNArqYJufPZmWdvTzmlcXywiWXPEnHQPlbVlqpGS2WMW2I6tq1KkRiDdl9g8dW4xrw-HWabQzLooA_umR9id5S9yir-PABckfteES7BbGfigeTMmOoCGtPCnIwZWYA" | docker login ${{ env.REGISTRY_DOMAIN }} --username 100044904888 --password-stdin
 
-    - name: 4. 构建并推送镜像
+    - name: 4. 构建并推送
       run: |
         docker build -t ${{ env.IMAGE_NAME }} .
         docker push ${{ env.IMAGE_NAME }}
-
-    - name: 5. 部署到 K8S 集群
-      run: |
-        kubectl apply -f deployment.yml \
-          --server=https://lb-ryliibho-ytlfnz1iuk89rpsb.clb.gz-tencentclb.com:443 \
-          --insecure-skip-tls-verify \
-          --validate=false
