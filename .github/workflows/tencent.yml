@@ -33,7 +33,11 @@ jobs:
 
     - name: Log in to Tencent Cloud Registry
       run: |
-        docker login ccr.ccs.tencentyun.com --username=100044904888
+        # 1. 安装腾讯云CLI（替换到你的部署脚本里）
+        curl -fsSL https://cloud.tencent.com/document/product/440/61760 | bash
+        tccli configure set --secret-id ${{ secrets.TENCENT_SECRET_ID }} --secret-key ${{ secrets.TENCENT_SECRET_KEY }} --region ap-guangzhou
+    
+        tccli ccr GetRegistryLoginToken --region ap-guangzhou | jq -r '.Data | "docker login \(.RegistryDomain) -u \(.Username) -p \(.Token)"' | bash
         docker build -t ccr.ccs.tencentyun.com/1223/yahoo-download:latest .
     
         docker push ccr.ccs.tencentyun.com/1223/yahoo-download:latest
