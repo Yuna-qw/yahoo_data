@@ -34,8 +34,7 @@ jobs:
     - name: 安装工具
       run: |
         sudo apt-get update
-        sudo apt-get install -y jq
-    
+        sudo apt-get install -y jq    
         - name: 配置腾讯云CLI
           run: |
             # 下载腾讯云CLI二进制文件（避免脚本安装的乱码问题）
@@ -43,9 +42,8 @@ jobs:
             chmod +x /usr/local/bin/tccli
             # 配置密钥和地域
             tccli configure set --secret-id ${{ secrets.TENCENT_SECRET_ID }} --secret-key ${{ secrets.TENCENT_SECRET_KEY }} --region ap-guangzhou
-        
         - name: 自动获取镜像仓库登录凭证并登录
-         run: |
+          run: |
             # 获取登录Token
             LOGIN_INFO=$(tccli ccr GetRegistryLoginToken --region ap-guangzhou --output json)
             # 解析出域名、用户名、Token
