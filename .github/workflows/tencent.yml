@@ -22,15 +22,13 @@ jobs:
     # 2. 安装依赖工具（jq、tccli）
     - name: Install dependencies (jq + TencentCloud CLI)
       run: |
-        # 更新apt源并安装jq
         sudo apt-get update
         sudo apt-get install -y jq
-        # 下载并安装腾讯云CLI二进制文件（避免脚本乱码）
-        curl -o /usr/local/bin/tccli https://cli.cloud.tencent.com/tencentcloud-cli/latest/ubuntu/amd64/tccli
-        chmod +x /usr/local/bin/tccli
-        # 配置腾讯云CLI密钥和地域
-        tccli configure set --secret-id ${{ env.TENCENT_SECRET_ID }} --secret-key ${{ env.TENCENT_SECRET_KEY }} --region ${{ env.TKE_REGION }}
-
+        # 替换为腾讯云CLI的官方下载脚本（自动适配系统）
+        curl -fsSL https://cloud.tencent.com/document/product/440/61760 | bash
+        # 验证tccli是否安装成功
+        tccli --version
+    
     # 3. 登录腾讯云镜像仓库
     - name: Login to Tencent Cloud Registry
       run: |
