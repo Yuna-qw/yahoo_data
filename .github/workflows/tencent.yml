@@ -31,13 +31,26 @@ jobs:
           --insecure-skip-tls-verify \
           --validate=false
 
-    - name: Log in to Tencent Cloud Registry
+    - name: 安装工具
       run: |
-        # 1. 安装腾讯云CLI（替换到你的部署脚本里）
-        curl -fsSL https://cloud.tencent.com/document/product/440/61760 | bash
-        tccli configure set --secret-id ${{ secrets.TENCENT_SECRET_ID }} --secret-key ${{ secrets.TENCENT_SECRET_KEY }} --region ap-guangzhou
+        sudo apt-get update
+        sudo apt-get install -y jq
     
-        tccli ccr GetRegistryLoginToken --region ap-guangzhou | jq -r '.Data | "docker login \(.RegistryDomain) -u \(.Username) -p \(.Token)"' | bash
-        docker build -t ccr.ccs.tencentyun.com/1223/yahoo-download:latest .
-    
-        docker push ccr.ccs.tencentyun.com/1223/yahoo-download:latest
+        - name: 配置腾讯云CLI
+          run: |
+            # 下载腾讯云CLI二进制文件（避免脚本安装的乱码问题）
+            curl -o /usr/local/bin/tccli https://cli.cloud.tencent.com/tencentcloud-cli/latest/ubuntu/amd64/tccli
+            chmod +x /usr/local/bin/tccli
+            # 配置密钥和地域
+            tccli configure set --secret-id ${{ secrets.TENCENT_SECRET_ID }} --secret-key ${{ secrets.TENCENT_SECRET_KEY }} --region ap-guangzhou
+        
+        - name: 自动获取镜像仓库登录凭证并登录
+          run: |
+            # 获取登录Token
+            LOGIN_INFO=$(tccli ccr GetRegistryLoginToken --region ap-guangzhou --output json)
+            # 解析出域名、用户名、Token
+            REGISTRY_DOMAIN=$(echo $LOGIN_INFO | jq -r '.Data.RegistryDomain')
+            USERNAME=$(echo $LOGIN_INFO | jq -r '.Data.Username')
+            TOKEN=$(echo $LOGIN_INFO | jq -r '.Data.Token')
+            # 非交互式登录Docker
+            echo $TOKEN | docker login $REGISTRY_DOMAIN --username $USERNAME --password-stdin
