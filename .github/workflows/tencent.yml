@@ -8,7 +8,7 @@ env:
   TKE_REGION: ap-guangzhou
   TKE_CLUSTER_ID: cls-4m9d09vg
   REGISTRY_DOMAIN: yahoo-data.tencentcloudcr.com
-  IMAGE_NAME: yahoo-data.tencentcloudcr.com/yahoo/yahoo-data.tencentclou
+  IMAGE_NAME: yahoo-data.tencentcloudcr.com/yahoo/yahoo_data
 
 jobs:
   deploy:
