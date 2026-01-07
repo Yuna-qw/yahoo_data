@@ -22,7 +22,7 @@ jobs:
 
       - name: 3. 安装下载数据需要的工具
         run: |
-          pip install pandas yfinance requests openpyxl
+          pip install pandas requests
 
       - name: 4. 开始下载数据
         run: |
