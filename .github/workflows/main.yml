@@ -8,11 +8,13 @@ on:
 
 jobs:
   run-python:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted 
+    
     steps:
       - name: 1. 准备代码
         uses: actions/checkout@v3
 
+      # 如果你服务器上已经装好了 Python 3.12，可以跳过 setup-python
       - name: 2. 准备 Python 环境
         uses: actions/setup-python@v4
         with:
@@ -20,8 +22,9 @@ jobs:
 
       - name: 3. 安装下载数据需要的工具
         run: |
-          pip install pandas yfinance requests
+          pip install pandas yfinance requests openpyxl
 
       - name: 4. 开始下载数据
         run: |
-          python 1.yahoo_data_download.py
+          # 确保脚本中的相对路径（如 new_csv/csv）在服务器上存在
+          python 2.QC.py
