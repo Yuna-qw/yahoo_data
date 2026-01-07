@@ -3,8 +3,6 @@ name: Stock Data Auto Run
 on:
   push:
     branches: [ main ]
-  schedule:
-    - cron: '0 2 * * *' 
 
 jobs:
   run-python:
@@ -14,11 +12,7 @@ jobs:
       - name: 1. 准备代码
         uses: actions/checkout@v3
 
-      - name: 2. 准备环境
+      - name: 2. 运行QC代码
         run: |
-          # 删掉那些让老系统崩溃的繁琐检查
-          pip install pandas requests --no-deps || true
-
-      - name: 3. 开始下载数据
-        run: |
-          python3 2.QC.py || echo "数据执行遇到警告，但尝试继续..."
+          # 直接用服务器自带的 python3 跑这个文件
+          python3 2.QC.py
