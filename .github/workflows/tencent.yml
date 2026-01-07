@@ -7,12 +7,14 @@ on:
 env:
   TKE_REGION: ap-guangzhou
   TKE_CLUSTER_ID: cls-4m9d09vg
-  REGISTRY_DOMAIN: yahoo-data.tencentcloudcr.com
+  
+  REGISTRY_DOMAIN: yahoo-data.tencentcloudcr.com 
   IMAGE_NAME: yahoo-data.tencentcloudcr.com/yahoo/yahoo_data
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted 
+    
     steps:
     - name: 1. 检出代码
       uses: actions/checkout@v4
@@ -28,7 +30,7 @@ jobs:
 
     - name: 3. 登录镜像仓库
       run: |
-        echo "eyJhbGciOiJSUzI1NiIsImtpZCI6IjM0RVk6WVZYUzpMNk5aOlJDTEY6NzdYNDpIQVlFOks1REw6Vk1SMjpEQkIyOkczVk86TlFBTTpHMlVIIn0.eyJvd25lclVpbiI6IjEwMDA0NDkwNDg4OCIsIm9wZXJhdG9yVWluIjoiMTAwMDQ0OTA0ODg4IiwiZXhwIjoxNzY2NzUzNTE3LCJuYmYiOjE3NjY3NDk5MTcsImlhdCI6MTc2Njc0OTkxN30.Id797C8TVMMdU1M6j3taxYhsWuRaMa8z0Kn_TtO-bQ4m7D593mFCFFH3tIkq62IBFAodk5GwizHJIEq_KlPa_maBselNT_eV4CItQ3vB84lrgGT4kj2HhX2DON-piWnL3abayzjutyl78muJbAQqLsVaHWKAm4oFfuFmGQy9WcoRGUVChjtIGOaZNGD-Le9Nv0IaKLLwFpmEc5UfUv891KAimNArqYJufPZmWdvTzmlcXywiWXPEnHQPlbVlqpGS2WMW2I6tq1KkRiDdl9g8dW4xrw-HWabQzLooA_umR9id5S9yir-PABckfteES7BbGfigeTMmOoCGtPCnIwZWYA" | docker login ${{ env.REGISTRY_DOMAIN }} --username 100044904888 --password-stdin
+        echo "${{ secrets.TCR_TOKEN }}" | docker login ${{ env.REGISTRY_DOMAIN }} --username 100044904888 --password-stdin
 
     - name: 4. 构建并推送
       run: |
