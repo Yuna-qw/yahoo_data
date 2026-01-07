@@ -5,14 +5,25 @@ on:
     branches: [ main ]
 
 jobs:
+  # 这个是您刚才跑成功的 QC 任务
   run-python:
     runs-on: self-hosted 
-    
     steps:
-      - name: 1. 准备代码
-        uses: actions/checkout@v3
-
+      - name: 1. 检出代码
+        uses: actions/checkout@v4
       - name: 2. 运行QC代码
+        run: python3 2.QC.py
+
+  deploy:
+    runs-on: self-hosted
+    needs: run-python  # 只有QC成功了才执行推送
+    steps:
+      - name: 1. 检出代码
+        uses: actions/checkout@v4
+      - name: 2. 登录镜像仓库
         run: |
-          # 直接用服务器自带的 python3 跑这个文件
-          python3 2.QC.py
+          echo "${{ secrets.TCR_TOKEN }}" | docker login yahoo-data.tencentcloudcr.com --username 100044904888 --password-stdin
+      - name: 3. 构建并推送镜像
+        run: |
+          docker build -t yahoo-data.tencentcloudcr.com/yahoo/yahoo_data .
+          docker push yahoo-data.tencentcloudcr.com/yahoo/yahoo_data
