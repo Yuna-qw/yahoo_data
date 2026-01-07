@@ -8,6 +8,7 @@ env:
   TKE_CLUSTER_ID: cls-4m9d09vg
   REGISTRY_DOMAIN: yahoo-data.tencentcloudcr.com 
   IMAGE_NAME: yahoo-data.tencentcloudcr.com/yahoo/yahoo_data
+  DOCKER_BUILDKIT: 1
 
 jobs:
   deploy:
@@ -24,7 +25,7 @@ jobs:
         secret_key: ${{ secrets.TENCENT_CLOUD_SECRET_KEY }}
         tke_region: ${{ env.TKE_REGION }}
         cluster_id: ${{ env.TKE_CLUSTER_ID }}
-        # 这是您集群的访问地址
+        # 如果内网地址是 10.0.x.x，请一定要改过来
         cluster_endpoint: https://lb-ryliibho-ytlfnz1iuk89rpsb.clb.gz-tencentclb.com:443
 
     - name: 3. 登录镜像仓库
@@ -33,5 +34,5 @@ jobs:
 
     - name: 4. 构建并推送
       run: |
-        docker build -t ${{ env.IMAGE_NAME }} .
+        docker build --pull -t ${{ env.IMAGE_NAME }} .
         docker push ${{ env.IMAGE_NAME }}
