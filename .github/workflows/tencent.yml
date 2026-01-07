@@ -1,8 +1,8 @@
 name: Tencent Kubernetes Engine
 
 on:
-  push:
-    branches: [ "main" ]
+  # 删除 push 部分，改为手动触发
+  workflow_dispatch: 
 
 env:
   TKE_REGION: ap-guangzhou
@@ -30,6 +30,7 @@ jobs:
 
     - name: 3. 登录镜像仓库
       run: |
+        # 请确保你在 GitHub Secrets 中设置了 TCR_TOKEN
         echo "${{ secrets.TCR_TOKEN }}" | docker login ${{ env.REGISTRY_DOMAIN }} --username 100044904888 --password-stdin
 
     - name: 4. 构建并推送
