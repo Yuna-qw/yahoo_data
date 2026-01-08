@@ -5,9 +5,8 @@ on:
     branches: [ main ]
 
 jobs:
-  # 这个是您刚才跑成功的 QC 任务
   run-python:
-    runs-on: self-hosted 
+    runs-on: ubuntu-latest 
     steps:
       - name: 1. 检出代码
         uses: actions/checkout@v4
