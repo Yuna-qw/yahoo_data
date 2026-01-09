@@ -1,0 +1,40 @@
+name: Build and Push to Alibaba Cloud
+
+on:
+  workflow_dispatch: 
+
+env:
+  REGISTRY: crpi-078q63v9lsxo0yds.cn-guangzhou.personal.cr.aliyuncs.com
+  NAMESPACE: yahoo_data
+  IMAGE: yahoo_data
+  TAG: latest
+
+jobs:
+  # 第一步：先跑一遍 Python 脚本，确保代码没问题
+  test-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: pip install pandas yfinance multitasking openpyxl
+      - name: Run QC Script
+        run: python3 2.QC.py
+
+  # 第二步：打包成容器镜像并推送到阿里云
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: test-python # 只有测试过了才推送
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to ACR
+        run: |
+          echo "${{ secrets.TCR_TOKEN }}" | docker login --username=nick4826144284 ${{ env.REGISTRY }} --password-stdin
+
+      - name: Build and Push Image
+        run: |
+          # 构建镜像
+          docker build -t ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }} .
+          # 推送镜像
+          docker push ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }}
