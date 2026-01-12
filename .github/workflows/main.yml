@@ -1,36 +1,51 @@
-name: Stock Data Auto Run
+name: Build and Push to Alibaba Cloud
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: 
+
+env:
+  REGISTRY: crpi-078q63v9lsxo0yds.cn-guangzhou.personal.cr.aliyuncs.com
+  NAMESPACE: yahoo_data
+  IMAGE: yahoo_data
+  TAG: latest
 
 jobs:
-  run-python:
-    runs-on: ubuntu-latest 
+  # 第一步：运行完整的 Python
+  process-data:
+    runs-on: ubuntu-latest
     steps:
-      - name: 1. 检出代码
-        uses: actions/checkout@v4
-      - name: 2. 安装 Python 环境和插件
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas yfinance multitasking
-      - name: 3. 运行QC代码
-        run: python3 2.QC.py
+          pip install pandas yfinance multitasking openpyxl
+      
+      - name: 1. 下载股票数据
+        run: python3 1.yahoo_data_download.py
+        
+      # - name: 2. 运行 QC 质控
+      #   run: python3 2.QC.py
 
-  deploy:
+      # - name: Upload QC Result (Artifact)
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: stock-qc-report
+      #     path: QC_summary.csv
+
+  # 第二步：数据处理完了，才打包镜像
+  build-and-push:
     runs-on: ubuntu-latest
-    needs: run-python
+    needs: process-data 
     steps:
-      - name: 1. 检出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 2. 登录腾讯云镜像仓库
-        # 注意：这里使用了 secrets 变量，请确保您在 GitHub Repo 的 Settings -> Secrets 里配置了 TCR_TOKEN
+      - name: Login to ACR
         run: |
-          echo "${{ secrets.TCR_TOKEN }}" | docker login yahoo-data.tencentcloudcr.com --username 100044904888 --password-stdin
+          echo "${{ secrets.TCR_TOKEN }}" | docker login --username=nick4826144284 ${{ env.REGISTRY }} --password-stdin
 
-      - name: 3. 构建并推送镜像
+      - name: Build and Push Image
         run: |
-          # 这一步会根据您仓库里的 Dockerfile 进行构建
-          docker build -t yahoo-data.tencentcloudcr.com/yahoo/yahoo_data:latest .
-          # 推送到腾讯云
-          docker push yahoo-data.tencentcloudcr.com/yahoo/yahoo_data:latest
+          docker build -t ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }} .
+          docker push ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }}
