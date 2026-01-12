@@ -28,7 +28,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: all-stock-csv-files
-          path: new_csv/Snp500_Ru1000/
+          path: new_csv/
         
       # - name: 2. 运行 QC 质控
       #   run: python3 2.QC.py
