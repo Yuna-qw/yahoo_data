@@ -24,6 +24,12 @@ jobs:
       - name: 3. 运行数据下载脚本
         run: python3 1.yahoo_data_download.py
 
+      - name: 打包下载好的股票数据
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-stock-csv-files
+          path: new_csv/Snp500_Ru1000/
+
       # - name: 4. 运行 QC 质控代码
       #   run: python3 2.QC.py
 
