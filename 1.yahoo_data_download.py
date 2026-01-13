@@ -7,7 +7,6 @@ import yfinance as yf
 from sqlalchemy import create_engine
 
 # --- 1. 数据库连接配置 ---
-# 这样写的好处是：在本地测时用硬编码密码，在 GitHub 跑时自动用加密密码
 DB_USER = "yu" 
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'Yahoo1223') # 优先读取 Secrets
 DB_HOST = "pgm-7xvv5102g97m8i18ho.pg.rds.aliyuncs.com" # 您的外网地址
@@ -83,7 +82,7 @@ def download_main():
             print(f"进度报告: 已处理 {i+1}/{len(stocks)}")
             
         # 频率控制：每只股票间隔 0.5 秒，既快又不被封 IP
-        time.sleep(0.5) 
+        time.sleep(0.5)
 
     print("\n--- 所有任务执行完毕 ---")
     print(f"同步失败清单: {fail_download['Snp500_Ru1000']}")
@@ -94,3 +93,4 @@ if __name__ == '__main__':
     download_main()
     total_time = time.time() - start_time
     print(f"🎉 任务完成！总耗时: {total_time:.2f}秒")
+
