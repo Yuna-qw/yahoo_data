@@ -19,25 +19,14 @@ jobs:
       - name: 2. 安装 Python 环境和插件
         run: |
           python -m pip install --upgrade pip
-          pip install pandas yfinance multitasking openpyxl
+          # 💡 这里必须加上 sqlalchemy 和 psycopg2-binary，否则连不上 PostgreSQL
+          pip install pandas yfinance sqlalchemy psycopg2-binary openpyxl
 
-      - name: 3. 运行数据下载脚本
+      - name: 3. 运行数据下载脚本 (同步至 RDS)
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: python3 1.yahoo_data_download.py
 
-      - name: 打包下载好的股票数据
-        uses: actions/upload-artifact@v4
-        with:
-          name: all-stock-csv-files
-          path: new_csv/
-
-      # - name: 4. 运行 QC 质控代码
-      #   run: python3 2.QC.py
-
-      # - name: 5. 上传 QC 报告到 GitHub
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: stock-qc-report
-      #     path: QC_summary.csv
 
   deploy-to-aliyun:
     runs-on: ubuntu-latest
