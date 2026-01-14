@@ -4,93 +4,75 @@ import datetime
 import sqlite3
 import pandas as pd
 import yfinance as yf
-import requests
 from sqlalchemy import create_engine
 
-# --- 1. 数据库配置 ---
-DB_USER = "yu"
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'Yahoo1223')
-DB_HOST = "pgm-7xvv5102g97m8i18ho.pg.rds.aliyuncs.com"
-DB_PORT = "5432"
+# --- 1. 数据库连接配置 ---
+DB_USER = "yu" 
+DB_PASSWORD = os.getenv('DB_PASSWORD', 'Yahoo1223') # 优先读取 Secrets
+DB_HOST = "pgm-7xvv5102g97m8i18ho.pg.rds.aliyuncs.com" 
+DB_PORT = "5432" 
 DB_NAME = "yahoo_stock_data"
 
-engine = create_engine(f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}", pool_pre_ping=True)
+conn_str = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+engine = create_engine(conn_str, pool_pre_ping=True)
 
-# --- 2. 核心下载与入库逻辑 ---
+fail_download = {'Snp500_Ru1000': []}
+
 def downloader(ticker, start_date, end_date):
-    table_name = ticker.lower().replace('.', '_').replace('-', '_')
-    
-    # 策略 A: yfinance
     try:
-        data = yf.download(ticker, start=start_date, end=end_date, progress=False, threading=False)
+        data = yf.download(ticker, start=start_date, end=end_date, progress=False)
         if data is not None and not data.empty:
             if isinstance(data.columns, pd.MultiIndex):
                 data.columns = data.columns.get_level_values(0)
+            
+            table_name = ticker.lower().replace('.', '_').replace('-', '_')
             data.to_sql(table_name, engine, if_exists='replace', index=True, method='multi')
-            print(f"✅ Success (yfinance): {ticker}") # 添加成功提示
             return True
-    except:
-        pass
-
-    # 策略 B: 完整的 Requests 备用接口解析
-    try:
-        start_unix = int(time.mktime(start_date.timetuple()))
-        end_unix = int(time.mktime(end_date.timetuple()))
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?period1={start_unix}&period2={end_unix}&interval=1d"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        
-        response = requests.get(url, headers=headers, timeout=15)
-        if response.status_code == 200:
-            result = response.json()
-            chart = result.get("chart", {}).get("result", [None])[0]
-            if chart:
-                ts = chart.get("timestamp", [])
-                indicators = chart.get("indicators", {})
-                quote = indicators.get("quote", [{}])[0]
-                adj = indicators.get("adjclose", [{}])[0].get("adjclose", [])
-                
-                df = pd.DataFrame({
-                    "Date": pd.to_datetime(ts, unit='s'),
-                    "Open": quote.get("open", []),
-                    "High": quote.get("high", []),
-                    "Low": quote.get("low", []),
-                    "Close": quote.get("close", []),
-                    "Adj Close": adj,
-                    "Volume": quote.get("volume", [])
-                })
-                
-                df = df.dropna(subset=['Close'])
-                if not df.empty:
-                    df.set_index("Date", inplace=True)
-                    df.to_sql(table_name, engine, if_exists='replace', index=True, method='multi')
-                    print(f"✅ Success (Requests): {ticker}") # 添加成功提示
-                    return True
-    except:
-        pass
-
-    print(f"❌ Failed: {ticker}")
+        else:
+            print(f"  ⚠️  [跳过] {ticker}: 雅虎无数据")
+    except Exception as e:
+        print(f"  ❌  [错误] {ticker}: {e}")
     return False
 
-# --- 3. 主程序控制 ---
-def download_main(option):
-    market_map = {1: 'Shanghai_Shenzhen', 2: 'Snp500_Ru1000', 3: 'TSX'}
-    start_date = datetime.datetime(1970, 1, 1)
-    end_date = datetime.datetime.now()
-
+def download_main():
+    print("="*50)
+    print(f"时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("="*50)
+    
     try:
-        conn_local = sqlite3.connect('yahoo_data.db')
-        targets = market_map.values() if option == 0 else [market_map.get(option)]
-        
-        for m_name in targets:
-            stocks = pd.read_sql(f"SELECT Yahoo_adj_Ticker_symbol FROM {m_name}", conn_local)['Yahoo_adj_Ticker_symbol'].tolist()
-            for ticker in stocks:
-                downloader(ticker, start_date, end_date)
-                time.sleep(1)
-                
-        conn_local.close()
+        conn = sqlite3.connect('yahoo_data.db')
+        query = "SELECT Yahoo_adj_Ticker_symbol FROM Snp500_Ru1000"
+        stocks = pd.read_sql(query, conn)['Yahoo_adj_Ticker_symbol'].tolist()
+        conn.close()
+        print(f"📂  成功加载清单: {len(stocks)} 只股票待处理")
     except Exception as e:
-        print(f"🚨 运行出错: {e}")
+        print(f"🚨  清单读取失败: {e}")
+        return
+
+    start_date = "1970-01-01"
+    end_date = datetime.datetime.now().strftime('%Y-%m-%d')
+    total = len(stocks)
+
+    print("\n🛰️  开始同步至云端 RDS 数据库...")
+    print("-" * 50)
+
+    for i, ticker in enumerate(stocks):
+        success = downloader(ticker, start_date, end_date)
+        if not success:
+            fail_download['Snp500_Ru1000'].append(ticker)
+        
+        if (i + 1) % 20 == 0 or (i + 1) == total:
+            percent = ((i + 1) / total) * 100
+            print(f"📊  进度: [{i+1}/{total}] {percent:>6.1f}% | 当前: {ticker:<6} | 写入正常")
+            
+        time.sleep(0.4) 
+
+    print("-" * 50)
+    if fail_download['Snp500_Ru1000']:
+        print(f"📝  失败清单 ({len(fail_download['Snp500_Ru1000'])} 只): {fail_download['Snp500_Ru1000']}")
+    print("="*50)
 
 if __name__ == '__main__':
-    download_main(0)
-    print(f"🏁 任务结束时间: {datetime.datetime.now().strftime('%H:%M:%S')}")
+    start_time = time.time()
+    download_main()
+    print(f"✨  总耗时: {time.time() - start_time:.2f} 秒\n")
