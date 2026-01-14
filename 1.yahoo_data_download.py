@@ -91,7 +91,7 @@ def download_main(option):
             stocks = pd.read_sql(f"SELECT Yahoo_adj_Ticker_symbol FROM {m_name}", conn_local)['Yahoo_adj_Ticker_symbol'].tolist()
             for ticker in stocks:
                 downloader(ticker, start_date, end_date)
-                time.sleep(0.5) # 保护连接
+                time.sleep(1) # 保护连接
                 
         conn_local.close()
     except Exception as e:
@@ -101,3 +101,4 @@ if __name__ == '__main__':
     # 0:全部跑一遍, 1:沪深, 2:标普, 3:加拿大
     download_main(0)
     print(f"🏁 任务结束时间: {datetime.datetime.now().strftime('%H:%M:%S')}")
+
