@@ -20,6 +20,7 @@ engine = create_engine(f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT
 # --- 2. 核心下载引擎 ---
 def downloader(ticker, start_date, end_date):
     table_name = ticker.lower().replace('.', '_').replace('-', '_')
+    
     # --- 模式 A: 使用 yfinance 下载 ---
     try:
         data = yf.download(ticker, start=start_date, end=end_date, progress=False, threading=False)
@@ -28,7 +29,7 @@ def downloader(ticker, start_date, end_date):
             if isinstance(data.columns, pd.MultiIndex):
                 data.columns = data.columns.get_level_values(0)
             
-            # 统一列名为小写且无空格（RDS 规范）
+            # 统一列名为小写且无空格
             data.columns = [c.lower().replace(' ', '_') for c in data.columns]
             
             # 写入 RDS
@@ -76,7 +77,7 @@ def downloader(ticker, start_date, end_date):
     return False
 
 # --- 3. 主程序控制 ---
-def download_main(market_option, use_requests_method=False):
+def download_main(market_option):
     # 对应本地真实表名
     market_map = {1: 'Shanghai_Shenzhen', 2: 'Snp500_Ru1000', 3: 'TSX'}
     start_date = datetime.datetime(1970, 1, 1)
@@ -91,9 +92,11 @@ def download_main(market_option, use_requests_method=False):
     
     for m_name in targets:
         try:
+            print(f"\n📂 正在同步市场: {m_name}")
             stocks = pd.read_sql(f"SELECT Yahoo_adj_Ticker_symbol FROM {m_name}", conn_local)['Yahoo_adj_Ticker_symbol'].tolist()
             for ticker in stocks:
-                downloader(ticker, start_date, end_date, use_requests=use_requests_method)
+                # 调用时去掉多余的 use_requests 参数
+                downloader(ticker, start_date, end_date)
                 time.sleep(0.3) 
         except Exception as e:
             print(f"🚨 读取表 {m_name} 出错: {e}")
@@ -103,9 +106,5 @@ def download_main(market_option, use_requests_method=False):
 if __name__ == '__main__':
     # 0:全部, 1:沪深, 2:标普, 3:加拿大
     market_choice = 0
-    # False: yfinance (快) | True: Requests (稳)
-    use_api = False 
-
-    download_main(market_choice, use_api)
-    print(f"🏁 同步结束: {datetime.datetime.now().strftime('%H:%M:%S')}")
-
+    download_main(market_choice)
+    print(f"\n🏁 同步结束: {datetime.datetime.now().strftime('%H:%M:%S')}")
