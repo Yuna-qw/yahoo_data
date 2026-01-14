@@ -100,7 +100,8 @@ if __name__ == '__main__':
     # 0:全部, 1:沪深, 2:标普, 3:加拿大
     market_choice = 0
     # False: yfinance (快) | True: Requests (稳)
-    use_api = False 
+    use_api = True 
 
     download_main(market_choice, use_api)
     print(f"🏁 同步结束: {datetime.datetime.now().strftime('%H:%M:%S')}")
+
