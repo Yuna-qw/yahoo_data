@@ -9,8 +9,8 @@ from sqlalchemy import create_engine
 
 # --- 1. 数据库配置 ---
 DB_USER = "yu"
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'Yahoo1223') #
-DB_HOST = "pgm-7xvv5102g97m8i18ho.pg.rds.aliyuncs.com" #
+DB_PASSWORD = os.getenv('DB_PASSWORD', 'Yahoo1223')
+DB_HOST = "pgm-7xvv5102g97m8i18ho.pg.rds.aliyuncs.com"
 DB_PORT = "5432"
 DB_NAME = "yahoo_stock_data"
 
@@ -18,7 +18,7 @@ engine = create_engine(f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT
 
 # --- 2. 核心下载与入库逻辑 ---
 def downloader(ticker, start_date, end_date):
-    table_name = ticker.lower().replace('.', '_').replace('-', '_') #
+    table_name = ticker.lower().replace('.', '_').replace('-', '_')
     
     # 策略 A: yfinance
     try:
@@ -27,11 +27,12 @@ def downloader(ticker, start_date, end_date):
             if isinstance(data.columns, pd.MultiIndex):
                 data.columns = data.columns.get_level_values(0)
             data.to_sql(table_name, engine, if_exists='replace', index=True, method='multi')
+            print(f"✅ Success (yfinance): {ticker}") # 添加成功提示
             return True
     except:
         pass
 
-    # 策略 B: 完整的 Requests 备用接口解析 (一字不差)
+    # 策略 B: 完整的 Requests 备用接口解析
     try:
         start_unix = int(time.mktime(start_date.timetuple()))
         end_unix = int(time.mktime(end_date.timetuple()))
@@ -43,13 +44,11 @@ def downloader(ticker, start_date, end_date):
             result = response.json()
             chart = result.get("chart", {}).get("result", [None])[0]
             if chart:
-                # 提取时间戳和数据指标
                 ts = chart.get("timestamp", [])
                 indicators = chart.get("indicators", {})
                 quote = indicators.get("quote", [{}])[0]
                 adj = indicators.get("adjclose", [{}])[0].get("adjclose", [])
                 
-                # 构建 DataFrame
                 df = pd.DataFrame({
                     "Date": pd.to_datetime(ts, unit='s'),
                     "Open": quote.get("open", []),
@@ -60,11 +59,11 @@ def downloader(ticker, start_date, end_date):
                     "Volume": quote.get("volume", [])
                 })
                 
-                # 清洗并入库
                 df = df.dropna(subset=['Close'])
                 if not df.empty:
                     df.set_index("Date", inplace=True)
                     df.to_sql(table_name, engine, if_exists='replace', index=True, method='multi')
+                    print(f"✅ Success (Requests): {ticker}") # 添加成功提示
                     return True
     except:
         pass
@@ -74,31 +73,24 @@ def downloader(ticker, start_date, end_date):
 
 # --- 3. 主程序控制 ---
 def download_main(option):
-    # 自动匹配您本地数据库中的三张表
     market_map = {1: 'Shanghai_Shenzhen', 2: 'Snp500_Ru1000', 3: 'TSX'}
-    
     start_date = datetime.datetime(1970, 1, 1)
     end_date = datetime.datetime.now()
 
     try:
-        conn_local = sqlite3.connect('yahoo_data.db') #
-        
-        # 确定下载目标
+        conn_local = sqlite3.connect('yahoo_data.db')
         targets = market_map.values() if option == 0 else [market_map.get(option)]
         
         for m_name in targets:
-            # 读取对应市场的清单
             stocks = pd.read_sql(f"SELECT Yahoo_adj_Ticker_symbol FROM {m_name}", conn_local)['Yahoo_adj_Ticker_symbol'].tolist()
             for ticker in stocks:
                 downloader(ticker, start_date, end_date)
-                time.sleep(1) # 保护连接
+                time.sleep(1)
                 
         conn_local.close()
     except Exception as e:
         print(f"🚨 运行出错: {e}")
 
 if __name__ == '__main__':
-    # 0:全部跑一遍, 1:沪深, 2:标普, 3:加拿大
     download_main(0)
     print(f"🏁 任务结束时间: {datetime.datetime.now().strftime('%H:%M:%S')}")
-
