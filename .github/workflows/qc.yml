@@ -22,11 +22,6 @@ jobs:
         # 安装 QC 脚本需要的库
         pip install pandas sqlalchemy psycopg2-binary python-dateutil
 
-    - name: Test Database Connection
-      run: |
-        sudo apt-get update && sudo apt-get install -y postgresql-client
-        PGPASSWORD=${{ secrets.DB_PASSWORD }} psql -h pgm-7xvv5102g97m8i18ho.pg.rds.aliyuncs.com -p 5432 -U yu -d yahoo_stock_data -c "SELECT 1;"
-
     - name: Run Monthly Logic QC
       env:
         # 必须在 GitHub Secrets 中设置 DB_PASSWORD
