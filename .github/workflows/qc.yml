@@ -2,7 +2,7 @@ name: Manual Monthly Data QC
 
 on:
   workflow_dispatch:
-
+  
 jobs:
   run-qc:
     runs-on: ubuntu-latest
