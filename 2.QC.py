@@ -3,11 +3,7 @@ import pandas as pd
 import datetime
 from sqlalchemy import create_engine, text
 
-# ========== 新增：验证脚本启动 ==========
 print("📌 2.QC.py 脚本已启动！当前时间:", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-print("📌 当前工作目录:", os.getcwd())
-print("📌 尝试读取的 DB_PASSWORD 是否存在:", "✅ 存在" if os.getenv('DB_PASSWORD') else "❌ 不存在")
-# ======================================
 
 # --- 1. 数据库配置 ---
 DB_USER = "yu"
@@ -26,6 +22,18 @@ engine = create_engine(
     }
 )
 
+def check_table_has_date_column(table_name):
+    """检查表是否有日期列"""
+    check_query = text(f"""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = '{table_name}' 
+        AND (column_name = 'date')
+    """)
+    with engine.connect() as conn:
+        res = conn.execute(check_query).fetchone()
+    return res[0] if res else None
+
 def run_stable_qc():
     # 判定基准：本月1号
     target_month = datetime.datetime.now().replace(day=1).strftime('%Y-%m-%d')
@@ -41,14 +49,24 @@ def run_stable_qc():
 
     results = []
     
-    # 2. 第二步：分批循环检查（增加打印，防止卡死）
+    # 2. 第二步：分批循环检查
     for i, table in enumerate(tables):
-        # 新增：打印当前检查的表名，定位卡顿时的表
         print(f"🔍 正在检查第 {i+1}/{total} 张表: {table}")
         
         try:
-            # 只取最后一行日期，极速查询
-            query = text(f'SELECT "Date" FROM "{table}" ORDER BY "Date" DESC LIMIT 1')
+            # 先检查表是否有日期列
+            date_column = check_table_has_date_column(table)
+            if not date_column:
+                results.append({
+                    "Ticker": table, 
+                    "Status": "🚨 无日期列", 
+                    "Last_Date": "N/A", 
+                    "Check": "表中无 date/Date/trade_date 列"
+                })
+                continue
+            
+            # 用实际存在的日期列查询最后一条数据
+            query = text(f'SELECT "{date_column}" FROM "{table}" ORDER BY "{date_column}" DESC LIMIT 1')
             with engine.connect() as conn:
                 res = conn.execute(query).fetchone()
             
@@ -57,14 +75,29 @@ def run_stable_qc():
                 last_dt_str = last_dt.strftime('%Y-%m-%d') if hasattr(last_dt, 'strftime') else str(last_dt)
                 # 判定时间是否足够新
                 is_stale = "❌ 旧数据" if last_dt_str < target_month else "✅ 最新"
-                results.append({"Ticker": table, "Status": "有数据", "Last_Date": last_dt_str, "Check": is_stale})
+                results.append({
+                    "Ticker": table, 
+                    "Status": "有数据", 
+                    "Last_Date": last_dt_str, 
+                    "Check": is_stale
+                })
             else:
-                results.append({"Ticker": table, "Status": "❌ 空表", "Last_Date": "N/A", "Check": "需补下载"})
+                results.append({
+                    "Ticker": table, 
+                    "Status": "❌ 空表", 
+                    "Last_Date": "N/A", 
+                    "Check": "需补下载"
+                })
         
         except Exception as e:
             error_msg = str(e)[:100]  # 截断过长的报错信息
-            results.append({"Ticker": table, "Status": "🚨 报错", "Last_Date": "Error", "Check": error_msg})
-            print(f"❌ 检查表 {table} 出错: {error_msg}")  # 新增：打印报错信息
+            results.append({
+                "Ticker": table, 
+                "Status": "🚨 报错", 
+                "Last_Date": "Error", 
+                "Check": error_msg
+            })
+            print(f"❌ 检查表 {table} 出错: {error_msg}")
 
         # 每隔 100 张表打印一次进度
         if (i + 1) % 100 == 0:
@@ -74,7 +107,7 @@ def run_stable_qc():
     df = pd.DataFrame(results)
     df.to_csv('QC_Full_Report.csv', index=False)
     
-    # 筛选出需要关注的“空表”或“旧数据”
+    # 筛选出需要关注的异常表
     df_issues = df[df['Check'] != "✅ 最新"]
     df_issues.to_csv('QC_Attention_Needed.csv', index=False)
     
