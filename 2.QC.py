@@ -3,6 +3,12 @@ import pandas as pd
 import datetime
 from sqlalchemy import create_engine, text
 
+# ========== 新增：验证脚本启动 ==========
+print("📌 2.QC.py 脚本已启动！当前时间:", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+print("📌 当前工作目录:", os.getcwd())
+print("📌 尝试读取的 DB_PASSWORD 是否存在:", "✅ 存在" if os.getenv('DB_PASSWORD') else "❌ 不存在")
+# ======================================
+
 # --- 1. 数据库配置 ---
 DB_USER = "yu"
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'Yahoo1223')
@@ -10,7 +16,15 @@ DB_HOST = "pgm-7xvv5102g97m8i18ho.pg.rds.aliyuncs.com"
 DB_PORT = "5432"
 DB_NAME = "yahoo_stock_data"
 
-engine = create_engine(f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}", pool_timeout=30)
+# 优化：增加查询超时，避免单条查询卡死
+engine = create_engine(
+    f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}",
+    pool_timeout=30,
+    connect_args={
+        "connect_timeout": 10,  # 数据库连接超时 10 秒
+        "options": "-c statement_timeout=5000"  # 单条 SQL 查询超时 5 秒
+    }
+)
 
 def run_stable_qc():
     # 判定基准：本月1号
@@ -29,6 +43,9 @@ def run_stable_qc():
     
     # 2. 第二步：分批循环检查（增加打印，防止卡死）
     for i, table in enumerate(tables):
+        # 新增：打印当前检查的表名，定位卡顿时的表
+        print(f"🔍 正在检查第 {i+1}/{total} 张表: {table}")
+        
         try:
             # 只取最后一行日期，极速查询
             query = text(f'SELECT "Date" FROM "{table}" ORDER BY "Date" DESC LIMIT 1')
@@ -45,7 +62,9 @@ def run_stable_qc():
                 results.append({"Ticker": table, "Status": "❌ 空表", "Last_Date": "N/A", "Check": "需补下载"})
         
         except Exception as e:
-            results.append({"Ticker": table, "Status": "🚨 报错", "Last_Date": "Error", "Check": str(e)})
+            error_msg = str(e)[:100]  # 截断过长的报错信息
+            results.append({"Ticker": table, "Status": "🚨 报错", "Last_Date": "Error", "Check": error_msg})
+            print(f"❌ 检查表 {table} 出错: {error_msg}")  # 新增：打印报错信息
 
         # 每隔 100 张表打印一次进度
         if (i + 1) % 100 == 0:
