@@ -10,49 +10,60 @@ DB_HOST = "pgm-7xvv5102g97m8i18ho.pg.rds.aliyuncs.com"
 DB_PORT = "5432"
 DB_NAME = "yahoo_stock_data"
 
-engine = create_engine(f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
+engine = create_engine(f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}", pool_timeout=30)
 
-def run_super_fast_qc():
-    print(f"🚀 启动超级闪电 QC... 当前时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+def run_stable_qc():
+    # 判定基准：本月1号
+    target_month = datetime.datetime.now().replace(day=1).strftime('%Y-%m-%d')
+    print(f"🚀 开始QC... 判定基准日期: {target_month}")
     
-    # 核心优化：直接从 PostgreSQL 系统统计表中一次性捞出所有表名和行数
-    query = """
-    SELECT 
-        relname as table_name, 
-        n_live_tup as row_count
-    FROM pg_stat_user_tables 
-    WHERE schemaname = 'public'
-    ORDER BY n_live_tup DESC;
-    """
+    # 1. 第一步：只拿表名
+    get_tables_query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
+    with engine.connect() as conn:
+        tables = [row[0] for row in conn.execute(text(get_tables_query)).fetchall()]
     
-    try:
-        with engine.connect() as conn:
-            df_all = pd.read_sql(text(query), conn)
-        
-        total_tables = len(df_all)
-        print(f"统计到数据库内共有 {total_tables} 张表。")
+    total = len(tables)
+    print(f"✅ 成功获取 {total} 张表名单，开始逐一核对...")
 
-        # 判定逻辑
-        # ✅ OK: 行数 > 0
-        # ❌ Empty: 行数 = 0
-        df_all['Status'] = df_all['row_count'].apply(lambda x: "✅ OK" if x > 0 else "❌ Empty")
+    results = []
+    
+    # 2. 第二步：分批循环检查（增加打印，防止卡死）
+    for i, table in enumerate(tables):
+        try:
+            # 只取最后一行日期，极速查询
+            query = text(f'SELECT "Date" FROM "{table}" ORDER BY "Date" DESC LIMIT 1')
+            with engine.connect() as conn:
+                res = conn.execute(query).fetchone()
+            
+            if res:
+                last_dt = res[0]
+                last_dt_str = last_dt.strftime('%Y-%m-%d') if hasattr(last_dt, 'strftime') else str(last_dt)
+                # 判定时间是否足够新
+                is_stale = "❌ 旧数据" if last_dt_str < target_month else "✅ 最新"
+                results.append({"Ticker": table, "Status": "有数据", "Last_Date": last_dt_str, "Check": is_stale})
+            else:
+                results.append({"Ticker": table, "Status": "❌ 空表", "Last_Date": "N/A", "Check": "需补下载"})
         
-        # 筛选出有问题的表
-        df_issues = df_all[df_all['Status'] == "❌ Empty"]
-        
-        # 保存报告
-        df_all.to_csv('QC_Full_Inventory.csv', index=False)
-        df_issues.to_csv('QC_Issues_Only.csv', index=False)
-        
-        print("-" * 30)
-        print(f"📊 QC 报告汇总:")
-        print(f"正常表数量: {total_tables - len(df_issues)}")
-        print(f"异常(空表): {len(df_issues)}")
-        print("-" * 30)
-        print("✅ 报告已生成: QC_Full_Inventory.csv 和 QC_Issues_Only.csv")
+        except Exception as e:
+            results.append({"Ticker": table, "Status": "🚨 报错", "Last_Date": "Error", "Check": str(e)})
 
-    except Exception as e:
-        print(f"🚨 QC 运行出错: {e}")
+        # 每隔 100 张表打印一次进度
+        if (i + 1) % 100 == 0:
+            print(f"⏳ 进度: {i + 1} / {total} (已完成 {(i+1)/total*100:.1f}%)")
+
+    # 3. 保存结果
+    df = pd.DataFrame(results)
+    df.to_csv('QC_Full_Report.csv', index=False)
+    
+    # 筛选出需要关注的“空表”或“旧数据”
+    df_issues = df[df['Check'] != "✅ 最新"]
+    df_issues.to_csv('QC_Attention_Needed.csv', index=False)
+    
+    print("\n" + "="*30)
+    print(f"🏁 QC 完毕！总表数: {total}")
+    print(f"🚩 异常/过期表数: {len(df_issues)}")
+    print("✅ 报告已生成: QC_Attention_Needed.csv")
+    print("="*30)
 
 if __name__ == '__main__':
-    run_super_fast_qc()
+    run_stable_qc()
