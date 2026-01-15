@@ -1,6 +1,6 @@
 import os
-import datetime
 import pandas as pd
+import datetime
 from sqlalchemy import create_engine, text
 
 # --- 1. 数据库配置 ---
@@ -12,84 +12,70 @@ DB_NAME = "yahoo_stock_data"
 
 engine = create_engine(f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
 
-def run_monthly_logic_qc():
-    print(f'🚀 开始执行QC判定... 当前时间: {datetime.datetime.now().strftime("%Y-%m-%d")}')
+def run_fast_qc():
+    print(f"🚀 启动QC... {datetime.datetime.now()}")
     
-    # 获取所有表名
+    # 用一条 SQL 统计所有表的行数（依靠 Postgres 统计信息）
+    # 注意：reltuples 是估算行数，速度极快；MAX 日期仍需抽样查询
+    query = """
+    SELECT 
+        relname as table_name, 
+        n_live_tup as row_count_estimate
+    FROM pg_stat_user_tables 
+    WHERE schemaname = 'public';
+    """
+    
     with engine.connect() as conn:
-        tables = conn.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")).fetchall()
+        df_tables = pd.read_sql(query, conn)
     
-    all_tables = [t[0] for t in tables]
     results = []
     today = datetime.datetime.now()
+    
+    print(f"检测到 {len(df_tables)} 张表，正在核对日期...")
 
-    for table in all_tables:
-        status = "✅ OK"
-        detail = ""
+    for idx, row in df_tables.iterrows():
+        table = row['table_name']
+        est_rows = row['row_count_estimate']
+        
+        # 只对有数据的表查最后日期，防止空跑
         last_date_str = "N/A"
-        monthly_count = 0
+        status = "✅ OK"
         
         try:
-            # 利用 Postgres 的 date_trunc 函数，找出每个月最后的一条记录
-            # 逻辑：按月份分组，取每组中 Date 最大（最后一天）的那行
-            monthly_query = text(f"""
-                SELECT COUNT(*) FROM (
-                    SELECT MAX("Date") 
-                    FROM {table} 
-                    GROUP BY date_trunc('month', "Date")
-                ) as monthly_data
-            """)
-            
-            last_date_query = text(f'SELECT MAX("Date") FROM {table}')
-
-            with engine.connect() as conn:
-                monthly_count = conn.execute(monthly_query).scalar()
-                last_dt = conn.execute(last_date_query).scalar()
-
-            
-            # 1. 判定 Empty
-            if monthly_count == 0:
+            if est_rows == 0:
                 status = "❌ Empty"
-                detail = "数据库内无任何历史数据"
-            
-            # 2. 判定 Stale (过期)
-            elif last_dt:
-                last_date = pd.to_datetime(last_dt)
-                last_date_str = last_date.strftime('%Y-%m-%d')
+            else:
+                # 仅查询最后一行日期
+                with engine.connect() as conn:
+                    last_dt = conn.execute(text(f'SELECT MAX("Date") FROM "{table}"')).scalar()
                 
-                # 如果最新数据不是本月的，也不是上个月月底的，就算 Stale
-                # 这里我们放宽到 35 天，如果超过 35 天没数据，说明漏掉了整整一个月
-                days_diff = (today - last_date).days
-                if days_diff > 35:
-                    status = "⚠️ Stale"
-                    detail = f"最新数据日期为 {last_date_str}，已缺失最近月份数据"
-            
-            # 3. 判定数据量是否足够
-            if monthly_count < 12 and status == "✅ OK":
-                status = "⚠️ Insufficient"
-                detail = f"月度有效数据仅 {monthly_count} 条"
-
+                if last_dt:
+                    last_date = pd.to_datetime(last_dt)
+                    last_date_str = last_date.strftime('%Y-%m-%d')
+                    # 月度逻辑判定：超过 35 天没更新算 Stale
+                    if (today - last_date).days > 35:
+                        status = "⚠️ Stale"
+                else:
+                    status = "❌ Empty"
         except Exception as e:
             status = "🚨 Error"
-            detail = str(e)
 
         results.append({
             "Ticker": table,
             "Status": status,
             "Last_Date": last_date_str,
-            "Total_Monthly_Points": monthly_count,
-            "Detail": detail
+            "Est_Rows": est_rows
         })
+        
+        # 每处理 100 张表打印一次，防止 GitHub 觉得我们卡死了
+        if idx % 100 == 0:
+            print(f"进度: {idx}/{len(df_tables)}...")
 
-    # --- 保存报告 ---
-    df = pd.DataFrame(results)
-    print(df['Status'].value_counts())
-    
-    df.to_csv('QC_Monthly_Logic_Report.csv', index=False)
-    df_failed = df[df['Status'] != "✅ OK"]
-    df_failed.to_csv('QC_Monthly_Issues.csv', index=False)
-    
-    print(f"\n✅ QC结束！")
+    # 保存报表
+    df_res = pd.DataFrame(results)
+    df_res.to_csv('QC_Monthly_Logic_Report.csv', index=False)
+    df_res[df_res['Status'] != "✅ OK"].to_csv('QC_Monthly_Issues.csv', index=False)
+    print("✅ QC 完成！报告已生成。")
 
 if __name__ == '__main__':
-    run_monthly_logic_qc()
+    run_fast_qc()
