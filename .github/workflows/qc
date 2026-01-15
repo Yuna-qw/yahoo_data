@@ -1,0 +1,38 @@
+name: Manual Monthly Data QC
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-qc:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # 安装 QC 脚本需要的库
+        pip install pandas sqlalchemy psycopg2-binary python-dateutil
+
+    - name: Run Monthly Logic QC
+      env:
+        # 必须在 GitHub Secrets 中设置 DB_PASSWORD
+        DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      run: |
+        python 2.QC.py
+
+    - name: Upload QC Reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: Monthly-QC-Reports
+        path: |
+          QC_Monthly_Logic_Report.csv
+          QC_Monthly_Issues.csv
