@@ -56,7 +56,6 @@ def run_stable_qc():
             
             if res and res[0]:
                 raw_date = res[0]
-                # ⭐ 关键修改：不管 res[0] 是带时间的 datetime 还是字符串，统一转为 YYYY-MM-DD
                 if isinstance(raw_date, (datetime.datetime, datetime.date)):
                     last_dt_str = raw_date.strftime('%Y-%m-%d')
                 else:
@@ -91,3 +90,4 @@ def run_stable_qc():
 
 if __name__ == '__main__':
     run_stable_qc()
+
