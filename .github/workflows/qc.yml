@@ -34,5 +34,6 @@ jobs:
       with:
         name: Monthly-QC-Reports
         path: |
-          QC_Monthly_Logic_Report.csv
-          QC_Monthly_Issues.csv
+          QC_Update.csv
+          QC_UpdateFailed.csv
+          QC_Empty.csv
