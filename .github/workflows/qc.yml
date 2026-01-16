@@ -1,7 +1,13 @@
-name: Manual Monthly Data QC & Push Image
+name: Manual Monthly Data QC & Push
 
 on:
   workflow_dispatch:
+
+env:
+  REGISTRY: crpi-078q63v9lsxo0yds.cn-guangzhou.personal.cr.aliyuncs.com
+  NAMESPACE: yahoo_data
+  IMAGE: yahoo_data
+  TAG: latest
 
 jobs:
   run-qc-and-push:
@@ -9,7 +15,7 @@ jobs:
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -21,14 +27,14 @@ jobs:
         python -m pip install --upgrade pip
         pip install pandas sqlalchemy psycopg2-binary python-dateutil
 
-    # 1. 就在 GitHub 云端运行一次 QC，生成结果文件供您下载
+    # 1. 运行 QC 脚本生成文件
     - name: Run Monthly Logic QC
       env:
         DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
       run: |
         python 2.QC.py
 
-    # 2. 把生成的结果文件传到 GitHub Actions 页面
+    # 2. 上传结果方便网页下载
     - name: Upload QC Reports
       uses: actions/upload-artifact@v4
       with:
@@ -38,13 +44,13 @@ jobs:
           QC_UpdateFailed.csv
           QC_Empty.csv
 
-    # 3. 登录阿里云容器镜像服务
-    - name: Login to Aliyun Container Registry
+    # 3. 登录阿里云
+    - name: Login to ACR
       run: |
-        echo "${{ secrets.DOCKER_PASSWORD }}" | docker login --username "${{ secrets.DOCKER_USERNAME }}" --password-stdin crpi-078q63v9lsxo0yds.cn-guangzhou.personal.cr.aliyuncs.com
+        echo "${{ secrets.TCR_TOKEN }}" | docker login --username=nick4826144284 ${{ env.REGISTRY }} --password-stdin
 
-    # 4. 构建并推送最新的镜像到云服务器
-    - name: Build and Push Docker Image
+    # 4. 构建并推送
+    - name: Build and Push Image
       run: |
-        docker build -t crpi-078q63v9lsxo0yds.cn-guangzhou.personal.cr.aliyuncs.com/yahoo_data/yahoo_data:latest .
-        docker push crpi-078q63v9lsxo0yds.cn-guangzhou.personal.cr.aliyuncs.com/yahoo_data/yahoo_data:latest
+        docker build -t ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }} .
+        docker push ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }}
