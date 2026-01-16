@@ -8,6 +8,8 @@ import sys
 def print_flush(*args, **kwargs):
     print(*args, **kwargs)
     sys.stdout.flush()
+VERSION_TAG = "2026-01-16 18:10 第n版"
+print_flush(f"📢 [DEBUG] 脚本版本: {VERSION_TAG}")
 
 # --- 数据库配置 ---
 DB_USER = "yu"
@@ -90,4 +92,5 @@ def run_stable_qc():
 
 if __name__ == '__main__':
     run_stable_qc()
+
 
