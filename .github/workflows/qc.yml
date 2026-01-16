@@ -1,10 +1,10 @@
-name: Manual Monthly Data QC
+name: Manual Monthly Data QC & Push Image
 
 on:
   workflow_dispatch:
-  
+
 jobs:
-  run-qc:
+  run-qc-and-push:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,16 +19,16 @@ jobs:
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        # 安装 QC 脚本需要的库
         pip install pandas sqlalchemy psycopg2-binary python-dateutil
 
+    # 1. 就在 GitHub 云端运行一次 QC，生成结果文件供您下载
     - name: Run Monthly Logic QC
       env:
-        # 必须在 GitHub Secrets 中设置 DB_PASSWORD
         DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
       run: |
         python 2.QC.py
 
+    # 2. 把生成的结果文件传到 GitHub Actions 页面
     - name: Upload QC Reports
       uses: actions/upload-artifact@v4
       with:
@@ -37,3 +37,14 @@ jobs:
           QC_Update.csv
           QC_UpdateFailed.csv
           QC_Empty.csv
+
+    # 3. 登录阿里云容器镜像服务
+    - name: Login to Aliyun Container Registry
+      run: |
+        echo "${{ secrets.DOCKER_PASSWORD }}" | docker login --username "${{ secrets.DOCKER_USERNAME }}" --password-stdin crpi-078q63v9lsxo0yds.cn-guangzhou.personal.cr.aliyuncs.com
+
+    # 4. 构建并推送最新的镜像到云服务器
+    - name: Build and Push Docker Image
+      run: |
+        docker build -t crpi-078q63v9lsxo0yds.cn-guangzhou.personal.cr.aliyuncs.com/yahoo_data/yahoo_data:latest .
+        docker push crpi-078q63v9lsxo0yds.cn-guangzhou.personal.cr.aliyuncs.com/yahoo_data/yahoo_data:latest
