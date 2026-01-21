@@ -1,7 +1,7 @@
-name: Build and Push to Alibaba Cloud
+name: Stock-Data-Full-Pipeline
 
 on:
-  workflow_dispatch: 
+  workflow_dispatch: # 保留手动启动按钮
 
 env:
   REGISTRY: crpi-078q63v9lsxo0yds.cn-guangzhou.personal.cr.aliyuncs.com
@@ -10,35 +10,55 @@ env:
   TAG: latest
 
 jobs:
-  # 任务：同步数据到云端数据库
-  process-data:
+  # 阶段 1：下载数据并进行质检 (QC)
+  data-processing:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pandas yfinance sqlalchemy psycopg2-binary
-      
-      - name: 1. 同步股票数据到 RDS
-        env:
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }} 
-        run: python3 1.yahoo_data_download.py
-
-  # 更新镜像
-  build-and-push:
-    runs-on: ubuntu-latest
-    needs: process-data 
-    steps:
-      - name: Checkout code
+      - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: Login to ACR
+      - name: 设置 Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10' # 统一使用 3.10，避免之前的语法错误
+
+      - name: 安装运行依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas yfinance sqlalchemy psycopg2-binary python-dateutil
+
+      - name: 1. 执行数据下载 (1.yahoo_data_download.py)
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: python 1.yahoo_data_download.py
+
+      - name: 2. 执行数据质检 (2.QC.py)
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: python 2.QC.py
+
+      - name: 3. 保存质检报告 (Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Monthly-QC-Reports
+          path: |
+            QC_Update.csv
+            QC_UpdateFailed.csv
+            QC_Empty.csv
+
+  # 阶段 2：构建新镜像并推送到阿里云
+  build-and-push-image:
+    runs-on: ubuntu-latest
+    needs: data-processing 
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 登录阿里云镜像仓库
         run: |
           echo "${{ secrets.TCR_TOKEN }}" | docker login --username=nick4826144284 ${{ env.REGISTRY }} --password-stdin
 
-      - name: Build and Push Image
+      - name: 构建并推送新镜像
         run: |
           docker build -t ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }} .
           docker push ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }}
