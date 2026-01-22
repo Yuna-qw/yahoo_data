@@ -1,0 +1,50 @@
+name: Manual Stock Data Check
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: crpi-078q63v9lsxo0yds.cn-guangzhou.personal.cr.aliyuncs.com
+  NAMESPACE: yahoo_data
+  IMAGE: yahoo_data
+  TAG: latest
+
+jobs:
+  run-check-logic:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 1. 检出代码
+      uses: actions/checkout@v4
+
+    - name: 2. 设置 Python 环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: 3. 安装必要插件
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas sqlalchemy psycopg2-binary openpyxl
+
+    - name: 4. 执行 Check 脚本
+      env:
+        DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      run: |
+
+        python 3.check.py
+
+    - name: 5. 上传 Excel 质检总结报告
+      uses: actions/upload-artifact@v4
+      with:
+        name: Stock-Check-Excel-Reports
+        path: QC_report_*.xlsx
+
+    - name: 6. 登录阿里云仓库
+      run: |
+        echo "${{ secrets.TCR_TOKEN }}" | docker login --username=nick4826144284 ${{ env.REGISTRY }} --password-stdin
+
+    - name: 7. 构建并更新镜像
+      run: |
+        docker build -t ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }} .
+        docker push ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }}
