@@ -3,34 +3,26 @@ import os
 import openpyxl
 import pandas as pd
 import datetime
+import sqlite3
 from sqlalchemy import create_engine, text
 
-# --- 1. 数据库配置 ---
-DB_USER = "yu"
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'Yahoo1223')
-DB_HOST = "pgm-7xvv5102g97m8i18ho.pg.rds.aliyuncs.com"
-DB_PORT = "5432"
-DB_NAME = "yahoo_stock_data"
+# --- 1. 远程 RDS 数据库配置 ---
+RDS_USER = "yu"
+RDS_PASSWORD = os.getenv('DB_PASSWORD', 'Yahoo1223')
+RDS_HOST = "pgm-7xvv5102g97m8i18ho.pg.rds.aliyuncs.com"
+RDS_PORT = "5432"
+RDS_NAME = "yahoo_stock_data"
 
-engine = create_engine(
-    f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}",
+rds_engine = create_engine(
+    f"postgresql://{RDS_USER}:{RDS_PASSWORD}@{RDS_HOST}:{RDS_PORT}/{RDS_NAME}",
     pool_timeout=30
 )
 
-# --- 2. 日期逻辑保留 ---
-now = datetime.datetime.now()
-# 判定基准：上月最后一天
-end_dt = datetime.datetime(now.year, now.month, 1) - datetime.timedelta(days=1)
-endDate = end_dt.strftime('%Y-%m-%d')  # 格式如: 2025-12-31
-
-if end_dt.month >= 10:
-    upDate = f"{end_dt.year}.{end_dt.month}"
-else:
-    upDate = f"{end_dt.year}.0{end_dt.month}"
-
+# --- 2. 本地 SQLite 配置 ---
 LOCAL_DB = "yahoo_data.db"
 
 def get_data_from_sqlite():
+    """从本地 sqlite 读表"""
     conn = sqlite3.connect(LOCAL_DB)
     try:
         data_1 = pd.read_sql("SELECT * FROM Shanghai_Shenzhen", conn)
@@ -43,61 +35,59 @@ def get_data_from_sqlite():
     finally:
         conn.close()
 
-def check_db_date(table_name):
-    """去数据库查最新日期"""
+# --- 3. 初始化清单 ---
+_data = get_data_from_sqlite()
+countries = ['Shanghai_Shenzhen', 'Snp500_Ru1000', 'TSX']
+
+# --- 4. 日期逻辑 ---
+now = datetime.datetime.now()
+end_dt = datetime.datetime(now.year, now.month, 1) - datetime.timedelta(days=1)
+endDate = end_dt.strftime('%Y-%m-%d')
+upDate = end_dt.strftime('%Y.%m')
+
+def check_rds_date(table_name):
+    """去远程 RDS 查每张表的最新日期"""
     try:
         query = text(f'SELECT "date" FROM "{table_name}" ORDER BY "date" DESC LIMIT 1')
-        with engine.connect() as conn:
+        with rds_engine.connect() as conn:
             res = conn.execute(query).fetchone()
         if res and res[0]:
-            # 统一转为 YYYY-MM-DD 字符串
             return res[0].strftime('%Y-%m-%d') if isinstance(res[0], (datetime.date, datetime.datetime)) else str(res[0])[:10]
         return None
     except:
-        return "Error"
+        return None # 如果 RDS 里没有这张表，返回 None
 
 def sum():
-    """汇总"""
     report_file = f"QC_report_{upDate}.xlsx"
-    
-    # 初始化 Excel 报告
     wb = openpyxl.Workbook()
     s = wb.active
     s.title = "Summary_cnt"
-    s['A1'], s['B1'], s['C1'], s['D1'], s['E1'] = "country", "tickers of master_sheet", "threshold", "total downloaded", endDate
+    s.append(["country", "tickers in local db", "threshold", "total in RDS", endDate])
     
-    n = 0
-    for country in countries:
-        print(f"正在检查市场: {country} ...")
-        t_mus = 0    # 主表要求下载的总数
-        t_down = 0   # 数据库中存在的表数量
-        dow_yes = 0  # 日期正确的数量
+    for n, country in enumerate(countries):
+        df_list = _data[n]
+        if df_list.empty:
+            continue
+            
+        print(f"🔍 正在核对市场: {country} ...")
+        t_mus = len(df_list) # 本地数据库里有多少只股票
+        t_down = 0           # 远程 RDS 存在的表
+        dow_yes = 0          # 日期正确的表
         
-        # 遍历主表中的每一行
-        for index, row in _data[n].iterrows():
-            if row['currently use'] == 'yes':
-                t_mus += 1
-                ticker = row['Yahoo_adj_Ticker_symbol'] # 假设列名是这个
-                
-                # 去数据库查日期
-                db_date = check_db_date(ticker)
-                
-                if db_date and db_date != "Error":
-                    t_down += 1
-                    if db_date == endDate:
-                        dow_yes += 1
+        for index, row in df_list.iterrows():
+            # 假设列名依然是 Yahoo_adj_Ticker_symbol
+            ticker = row['Yahoo_adj_Ticker_symbol']
+            
+            db_date = check_rds_date(ticker)
+            if db_date:
+                t_down += 1
+                if db_date == endDate:
+                    dow_yes += 1
         
-        # 写入 Excel
-        row_idx = n + 2
-        s['A' + str(row_idx)] = country
-        s['B' + str(row_idx)] = t_mus
-        s['C' + str(row_idx)] = int(0.9 * t_mus)
-        s['D' + str(row_idx)] = t_down
-        s['E' + str(row_idx)] = dow_yes
-        n += 1
+        s.append([country, t_mus, int(0.9 * t_mus), t_down, dow_yes])
 
     wb.save(report_file)
-    print(f"✅ QC 汇总完成，报告已生成: {report_file}")
+    print(f"✅ 完成！清单来自 {LOCAL_DB}，质检结果已生成: {report_file}")
 
 if __name__ == '__main__':
     sum()
