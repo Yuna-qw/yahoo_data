@@ -81,7 +81,7 @@ def sum():
             db_date = check_rds_date(ticker)
             if db_date:
                 t_down += 1
-                if db_date == endDate:
+                if db_date and db_date >= endDate:
                     dow_yes += 1
         
         s.append([country, t_mus, int(0.9 * t_mus), t_down, dow_yes])
@@ -91,4 +91,5 @@ def sum():
 
 if __name__ == '__main__':
     sum()
+
 
