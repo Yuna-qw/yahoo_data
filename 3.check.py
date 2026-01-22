@@ -48,7 +48,8 @@ upDate = end_dt.strftime('%Y.%m')
 def check_rds_date(table_name):
     """去远程 RDS 查每张表的最新日期"""
     try:
-        query = text(f'SELECT "date" FROM "{table_name}" ORDER BY "date" DESC LIMIT 1')
+        fixed_name = table_name.lower().replace('.', '_')
+        query = text(f'SELECT "date" FROM "{fixed_name}" ORDER BY "date" DESC LIMIT 1')
         with rds_engine.connect() as conn:
             res = conn.execute(query).fetchone()
         if res and res[0]:
@@ -75,7 +76,6 @@ def sum():
         dow_yes = 0          # 日期正确的表
         
         for index, row in df_list.iterrows():
-            # 假设列名依然是 Yahoo_adj_Ticker_symbol
             ticker = row['Yahoo_adj_Ticker_symbol']
             
             db_date = check_rds_date(ticker)
@@ -91,3 +91,4 @@ def sum():
 
 if __name__ == '__main__':
     sum()
+
