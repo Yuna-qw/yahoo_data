@@ -1,4 +1,4 @@
-name: Monthly Stock Data Pipeline (Download + Check + Push)
+name: Monthly Stock Data Pipeline
 
 on:
   workflow_dispatch: # 手动启动
