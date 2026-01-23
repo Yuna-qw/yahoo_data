@@ -1,7 +1,7 @@
-name: Stock-Data-Full-Pipeline
+name: Monthly Stock Data Pipeline (Download + Check + Push)
 
 on:
-  workflow_dispatch: # 保留手动启动按钮
+  workflow_dispatch: # 手动启动
 
 env:
   REGISTRY: crpi-078q63v9lsxo0yds.cn-guangzhou.personal.cr.aliyuncs.com
@@ -10,55 +10,84 @@ env:
   TAG: latest
 
 jobs:
-  # 阶段 1：下载数据并进行质检 (QC)
+  # 阶段 1：执行数据下载和QC (CSV 报告)
   data-processing:
     runs-on: ubuntu-latest
     steps:
-      - name: 检出代码
+      - name: 1. 检出代码
         uses: actions/checkout@v4
 
-      - name: 设置 Python 3.10
+      - name: 2. 设置 Python 3.10
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10' # 统一使用 3.10，避免之前的语法错误
+          python-version: '3.10'
 
-      - name: 安装运行依赖
+      - name: 3. 安装依赖
         run: |
           python -m pip install --upgrade pip
-          pip install pandas yfinance sqlalchemy psycopg2-binary python-dateutil
+          pip install pandas yfinance sqlalchemy psycopg2-binary python-dateutil openpyxl
 
-      - name: 1. 执行数据下载 (1.yahoo_data_download.py)
+      - name: 4. 执行数据下载 (1.yahoo_data_download.py)
         env:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: python 1.yahoo_data_download.py
 
-      - name: 2. 执行数据质检 (2.QC.py)
+      - name: 5. 执行数据质检 (2.QC.py)
         env:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: python 2.QC.py
 
-      - name: 3. 保存质检报告 (Artifact)
+      - name: 6. 保存原始质检报告 (CSV)
         uses: actions/upload-artifact@v4
         with:
-          name: Monthly-QC-Reports
+          name: Monthly-CSV-Reports
           path: |
             QC_Update.csv
             QC_UpdateFailed.csv
             QC_Empty.csv
 
-  # 阶段 2：构建新镜像并推送到阿里云
-  build-and-push-image:
+  # 阶段 2：执行Check
+  advanced-check:
     runs-on: ubuntu-latest
-    needs: data-processing 
+    needs: data-processing # 确保下载完再核对
     steps:
-      - name: 检出代码
+      - name: 1. 检出代码
         uses: actions/checkout@v4
 
-      - name: 登录阿里云镜像仓库
+      - name: 2. 设置 Python 环境
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 3. 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas sqlalchemy psycopg2-binary openpyxl
+
+      - name: 4. 执行 Check 脚本 (3.check.py)
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: python 3.check.py
+
+      - name: 5. 上传最终 Excel 总结报告
+        uses: actions/upload-artifact@v4
+        with:
+          name: Final-Stock-Check-Excel
+          path: QC_report_*.xlsx
+
+  # 阶段 3：构建并推送新镜像
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: advanced-check
+    steps:
+      - name: 1. 检出代码
+        uses: actions/checkout@v4
+
+      - name: 2. 登录阿里云镜像仓库
         run: |
           echo "${{ secrets.TCR_TOKEN }}" | docker login --username=nick4826144284 ${{ env.REGISTRY }} --password-stdin
 
-      - name: 构建并推送新镜像
+      - name: 3. 构建并推送新镜像
         run: |
           docker build -t ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }} .
           docker push ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }}
