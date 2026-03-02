@@ -5,52 +5,49 @@ from llama_index.embeddings.dashscope import DashScopeEmbedding
 from typing import List
 
 # 配置
-DASH_SCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "你的API KEY")
+DASH_SCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 EMBEDDING_MODEL_NAME = "text-embedding-v2"
 INDEX_PATH = "llama_index_stock_index"
 
 BASE_FALLBACK_RULES = """
-- **视图/表概览:** 数据库使用 **PostgreSQL**，包含 `stock_data` (每日数据) 和 `stock_monthly_change` (月度分析数据) 两个对象。
-- **ABSOLUTE CRITICAL RULE (列名引用):** PostgreSQL 列名在 SQL 中必须使用**小写且不加双引号**引用（例如：`ticker`, `month_start_date`, `monthly_change_pct`）。只有包含空格的列名才需要双引号。
+- **视图/表概览:** 数据库使用 **DuckDB**，包含 `stock_data` (每日数据) 和 `stock_monthly_change` (月度分析数据) 两个对象。
+- **ABSOLUTE CRITICAL RULE (列名引用):** DuckDB 列名引用时，除非包含空格（如 "Adj Close"），否则**禁止**加双引号，且**禁止**将列名强转为小写。直接使用字段原名即可（如 `Ticker`, `Date`, `Monthly_Change_Pct`）。
 - **月度查询规则:** 涉及月度涨跌幅/额必须使用 `stock_monthly_change` 视图。
 - **时间序列规则:** 查询最近/最新数据时，必须使用 `ORDER BY [日期字段] DESC`。
 """
 
-
 # 1. 知识源 (Documents)
 def define_rag_documents() -> List[Document]:
-    """定义细粒度 RAG 知识文档列表，使用 LlamaIndex Document。"""
+    """针对细粒度 RAG 知识文档列表。"""
     documents = [
         # 数据库概览及字段
-        Document(text="数据库包含两个主要对象：`stock_data` 表和 `stock_monthly_change` 视图。**底层数据库使用 PostgreSQL**。"),
-        Document(text="`stock_data` 表包含每日股票数据，字段有：ticker (TEXT, PK1), date (DATE, PK2), country (TEXT), open (NUMERIC), high (NUMERIC), low (NUMERIC), close (NUMERIC), adj_close (NUMERIC), volume (BIGINT)。"),
-        Document(text="`stock_monthly_change` 视图包含月度分析数据，字段有：ticker (TEXT, PK1), country (TEXT), month_start_date (TIMESTAMP), monthly_close (REAL), prev_monthly_close (REAL), monthly_change_amt (REAL), monthly_change_pct (REAL)。"),
+        Document(text="数据库运行在 DuckDB 引擎上。包含：`stock_data` 表和 `stock_monthly_change` 视图。"),
+        Document(text="`stock_data` 字段：Ticker (TEXT), Date (DATE), Country (TEXT), Open (DOUBLE), High (DOUBLE), Low (DOUBLE), Close (DOUBLE), \"Adj Close\" (DOUBLE), Volume (BIGINT)。"),
+        Document(text="`stock_monthly_change` 字段：Ticker (TEXT), Country (TEXT), Month_Start_Date (TIMESTAMP), Monthly_Close (REAL), Prev_Monthly_Close (REAL), Monthly_Change_Amt (REAL), Monthly_Change_Pct (REAL)。"),
 
-        Document(text="**ABSOLUTE CRITICAL POSTGRES RULE (列名引用):** PostgreSQL 列名在 SQL 中必须使用**小写**且**不加双引号**引用。例如，必须使用 `ticker`, `month_start_date`, `monthly_change_pct`。**核心原则：除非包含空格，否则一律小写且不加引号。**"),
+        # 引用规则
+        Document(text="**ABSOLUTE CRITICAL DUCKDB RULE (标识符):** 字段名引用必须保持一致。带空格的字段必须加双引号，如 `\"Adj Close\"`。普通字段如 `Ticker`, `Monthly_Change_Pct` 不建议加引号，且不需要强转小写。"),
 
         # 强制输出规则
-        Document(text="**ABSOLUTE CRITICAL OUTPUT RULE (结果字段):** 所有查询结果（无论是否涉及图表）**必须**在 SELECT 子句中包含 `ticker` 字段和相应的日期字段 (`date` 或 `month_start_date`)，以确保结果清晰和图表生成成功。"),
-        Document(text="**ABSOLUTE CRITICAL OUTPUT FORMAT:** LLM 必须且只能输出最终的 PostgreSQL SQL 语句。**严禁**在 SQL 语句块内或周围包含任何注释、解释、Markdown 格式化外的文字（如 'However...', 'To achieve that...' 等）。"),
+        Document(text="**ABSOLUTE CRITICAL OUTPUT RULE:** 所有查询必须 SELECT `Ticker` 和相应的日期字段 (`Date` 或 `Month_Start_Date`)，否则图表模块会崩溃。"),
+        Document(text="**ABSOLUTE CRITICAL OUTPUT FORMAT:** 仅输出 DuckDB SQL。严禁输出 Markdown 代码块外的任何文字或注释。"),
 
         # 关键联接规则
-        Document(text="**ABSOLUTE CRITICAL POSTGRES RULE (联接稳健性):** 联接 `stock_data` (T1) 和 `stock_monthly_change` (T2) 时，联接条件**必须**使用双向截断：`T1.ticker = T2.ticker AND DATE_TRUNC('month', T1.date) = DATE_TRUNC('month', T2.month_start_date)`。"),
+        Document(text="**ABSOLUTE CRITICAL DUCKDB JOIN:** 联接 `stock_data` (T1) 和 `stock_monthly_change` (T2) 时，日期对齐必须使用 `date_trunc('month', T1.Date) = date_trunc('month', T2.Month_Start_Date)`。"),
 
-        # 关键日期过滤规则
-        Document(text="**CRITICAL POSTGRES RULE (TIMESTAMP 筛选):** `stock_monthly_change.month_start_date` 字段是 **TIMESTAMP** 类型。查询或比较该字段时，日期字面量（如 '2024-10-01'）**必须**使用 `::timestamp` 后缀进行明确转换，例如：`month_start_date = 'YYYY-MM-DD'::timestamp`。"),
-        Document(text="**CRITICAL POSTGRESQL DATE RULE 1 (过滤年份):** PostgreSQL 过滤年份的正确语法是：`EXTRACT(YEAR FROM [日期字段]) = [年份]`。"),
-        Document(text="**CRITICAL POSTGRESQL DATE RULE 2 (过滤月份):** PostgreSQL 过滤月份的正确语法是：`EXTRACT(MONTH FROM [日期字段]) = [月份]`。"),
+        # 日期过滤规则
+        Document(text="**CRITICAL DUCKDB DATE RULE 1:** 过滤年份使用 `year(Date) = 2025` 或 `date_part('year', Date) = 2025`。"),
+        Document(text="**CRITICAL DUCKDB DATE RULE 2:** 过滤月份使用 `month(Date) = 10` 或 `date_part('month', Date) = 10`。"),
+        Document(text="**CRITICAL DUCKDB TIMESTAMP:** DuckDB 处理字符串日期非常智能，直接使用 `'2025-01-01'` 即可，不需要像 Postgres 那样加 `::timestamp`。"),
 
-        # 联接粒度对齐规则
-        Document(text="**ABSOLUTE CRITICAL RULE (联接粒度对齐):** 当联接 `stock_data` (每日) 和 `stock_monthly_change` (月度) 并且需要精确到月度收盘价时，**必须**同时满足三个条件：1) Ticker 匹配；2) 双向截断联接：`DATE_TRUNC('month', T1.date) = DATE_TRUNC('month', T2.month_start_date)`；3) 仅取月末日期过滤：`T1.date = (SELECT MAX(date) FROM stock_data sd_sub WHERE sd_sub.ticker = T1.ticker AND DATE_TRUNC('month', sd_sub.date) = DATE_TRUNC('month', T1.date))`。"),
-
-        # 月度视图的使用限制
-        Document(text="**视图使用限制:** `stock_monthly_change` 视图已经是月度聚合数据，查询某股票某个月的每日收盘价时，**必须**使用 `stock_data` 表。"),
+        # 联接粒度对齐
+        Document(text="**ABSOLUTE CRITICAL RULE (月末对齐):** 联接两表取月度收盘价时，必须增加过滤条件：`T1.Date = (SELECT MAX(sd_sub.Date) FROM stock_data sd_sub WHERE sd_sub.Ticker = T1.Ticker AND date_trunc('month', sd_sub.Date) = date_trunc('month', T1.Date))`。"),
 
         # Top N 规则
-        Document(text="**Top N 规则:** 查询某列的最大值（如最大涨幅）或前 N 记录时，**必须**使用 `ORDER BY [列名] DESC LIMIT N`，且 SELECT 字段中必须包含 ticker 和日期。"),
+        Document(text="**Top N 规则:** 获取最大值或排名时，使用 `ORDER BY [字段] DESC LIMIT N`。"),
 
         # 联接示例模板
-        Document(text="**CRITICAL EXAMPLE (复杂联接):** 查询 'PARA' 2025年的每月收盘价 (`close`) 及其月度涨幅。唯一正确的 SQL 模板是：`SELECT T1.ticker, T1.date, T1.close, T2.monthly_change_pct FROM stock_data AS T1 JOIN stock_monthly_change AS T2 ON T1.ticker = T2.ticker AND DATE_TRUNC('month', T1.date) = DATE_TRUNC('month', T2.month_start_date) WHERE T1.ticker = 'PARA' AND EXTRACT(YEAR FROM T1.date) = 2025 AND T1.date = (SELECT MAX(date) FROM stock_data sd_sub WHERE sd_sub.ticker = T1.ticker AND DATE_TRUNC('month', sd_sub.date) = DATE_TRUNC('month', T1.date)) ORDER BY T1.date`。"),
+        Document(text="**CRITICAL EXAMPLE (DuckDB 模板):** 查询 'PARA' 2025年每月收盘价及涨幅：`SELECT T1.Ticker, T1.Date, T1.Close, T2.Monthly_Change_Pct FROM stock_data AS T1 JOIN stock_monthly_change AS T2 ON T1.Ticker = T2.Ticker AND date_trunc('month', T1.Date) = date_trunc('month', T2.Month_Start_Date) WHERE T1.Ticker = 'PARA' AND year(T1.Date) = 2025 AND T1.Date = (SELECT MAX(Date) FROM stock_data sd_sub WHERE sd_sub.Ticker = T1.Ticker AND date_trunc('month', sd_sub.Date) = date_trunc('month', T1.Date)) ORDER BY T1.Date`。"),
     ]
     return documents
 
