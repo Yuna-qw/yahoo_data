@@ -9,7 +9,6 @@ import duckdb  # 引入 DuckDB
 from concurrent.futures import ThreadPoolExecutor
 
 # 1. 数据库配置
-# 现在的连接非常简单，数据会保存在项目根目录的 yahoo_stock_data.duckdb 文件里
 DB_PATH = "yahoo_stock_data.duckdb"
 con = duckdb.connect(DB_PATH)
 
@@ -122,3 +121,4 @@ if __name__ == '__main__':
     
     download_main(market_choice, method_choice)
     print(f"\n🏁 同步结束: {datetime.datetime.now().strftime('%H:%M:%S')}")
+
