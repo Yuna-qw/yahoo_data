@@ -5,7 +5,7 @@ import sqlite3
 import pandas as pd
 import yfinance as yf
 import requests
-import duckdb  # 引入 DuckDB
+import duckdb  
 from concurrent.futures import ThreadPoolExecutor
 
 # 1. 数据库配置
@@ -54,42 +54,33 @@ def download_via_requests(ticker, start_date, end_date):
 
 # 3. 核心下载逻辑
 def download_chunk(ticker_list, start_date, end_date, method_choice):
-    # 策略 A: yfinance 批量
-    if method_choice in [0, 1]:
+    for ticker in ticker_list:
         try:
-            data = yf.download(ticker_list, start=start_date, end=end_date, interval='1mo', group_by='ticker', progress=False)
-            for ticker in ticker_list:
-                try:
-                    df = data[ticker].dropna(subset=['Close']) if len(ticker_list) > 1 else data.dropna(subset=['Close'])
-                    if not df.empty:
-                        df.columns = [c.lower().replace(' ', '_') for c in df.columns]
-                        table_name = ticker.lower().replace('.', '_').replace('-', '_')
-                        
-                        # DuckDB 批量入库
-                        con.execute(f"CREATE TABLE IF NOT EXISTS {table_name} AS SELECT * FROM df")
-                        con.execute(f"INSERT OR REPLACE INTO {table_name} SELECT * FROM df")
-                        
-                        print(f"✅ yf 成功: {ticker}")
-                        continue
-                    
-                    if method_choice == 0:
-                        if download_via_requests(ticker, start_date, end_date):
-                            print(f"补✅ Requests 成功: {ticker}")
-                except:
-                    if method_choice == 0:
-                        if download_via_requests(ticker, start_date, end_date):
-                            print(f"补✅ Requests 成功: {ticker}")
+            success = False
+            #  yfinance
+            if method_choice in [0, 1]:
+                # 增加 timeout 参数，防止死等
+                df = yf.download(ticker, start=start_date, end=end_date, 
+                                 interval='1mo', progress=False, timeout=10)
+                if not df.empty:
+                    df.columns = [c.lower().replace(' ', '_') for c in df.columns]
+                    table_name = ticker.lower().replace('.', '_').replace('-', '_')
+                    con.execute(f"CREATE TABLE IF NOT EXISTS {table_name} AS SELECT * FROM df")
+                    con.execute(f"INSERT OR REPLACE INTO {table_name} SELECT * FROM df")
+                    print(f"✅ yf 成功: {ticker}")
+                    success = True
+            
+            # 如果 yf 失败且模式允许，用 Requests 补录
+            if not success and method_choice in [0, 2]:
+                if download_via_requests(ticker, start_date, end_date):
+                    print(f"✅ API 成功: {ticker}")
+                else:
+                    print(f"❌ {ticker} 完全失败")
+            
+            time.sleep(0.5)
+            
         except Exception as e:
-            print(f"⚠️ yf 批量组失败，尝试 Requests 逐个补录...")
-            if method_choice == 0:
-                for ticker in ticker_list:
-                    if download_via_requests(ticker, start_date, end_date):
-                        print(f"补✅ Requests 成功: {ticker}")
-
-    elif method_choice == 2:
-        for ticker in ticker_list:
-            if download_via_requests(ticker, start_date, end_date):
-                print(f"✅ API 成功: {ticker}")
+            print(f"⚠️ 处理 {ticker} 时出错: {e}")
 
 # 4. 主程序控制
 def download_main(market_option, method_option):
@@ -100,18 +91,13 @@ def download_main(market_option, method_option):
     conn_local = sqlite3.connect('yahoo_data.db')
     targets = market_map.values() if market_option == 0 else [market_map.get(market_option)]
     
-    print(f"🚀 启动月度下载 [ {method_option}]...")
+    print(f"🚀 启动月度下载 [模式 {method_option}]...")
 
     for m_name in targets:
         stocks = pd.read_sql(f"SELECT Yahoo_adj_Ticker_symbol FROM {m_name}", conn_local)['Yahoo_adj_Ticker_symbol'].tolist()
         
-        chunk_size = 15 
-        chunks = [stocks[i:i + chunk_size] for i in range(0, len(stocks), chunk_size)]
-        
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            for chunk in chunks:
-                executor.submit(download_chunk, chunk, start_date, end_date, method_option)
-                time.sleep(1.2)
+        print(f"📦 正在处理 {m_name}，共 {len(stocks)} 只股票...")
+        download_chunk(stocks, start_date, end_date, method_option)
                 
     conn_local.close()
 
@@ -121,4 +107,5 @@ if __name__ == '__main__':
     
     download_main(market_choice, method_choice)
     print(f"\n🏁 同步结束: {datetime.datetime.now().strftime('%H:%M:%S')}")
+
 
