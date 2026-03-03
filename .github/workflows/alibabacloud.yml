@@ -24,36 +24,28 @@ jobs:
       - name: 3. 安装所有依赖
         run: |
           python -m pip install --upgrade pip
-          pip install pandas yfinance duckdb python-dateutil openpyxl llama-index-core llama-index-embeddings-dashscope llama-index-llms-openai
+          pip install pandas yfinance duckdb python-dateutil openpyxl llama-index-core llama-index-embeddings-dashscope llama-index-llms-openai langchain-openai langchain-community faiss-cpu
 
-      - name: 4. 执行数据下载
-        run: python 1.yahoo_data_download.py
+      - name: 4. 执行数据流 (下载 -> 质检 -> Check)
+        run: |
+          python 1.yahoo_data_download.py
+          python 2.QC.py
+          python 3.check.py
 
-      - name: 5. 执行数据质检
-        run: python 2.QC.py
-
-      - name: 6. 执行Check
-        run: python 3.check.py
-
-      - name: 7. 构建 RAG 索引
+      - name: 5. 构建 RAG 向量索引
         env:
-          # 从 GitHub Secrets 注入钥匙
           DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python 5.rag_setup.py
 
-      - name: 8. 保存所有文件
-        if: always() 
+      - name: 6. 上传所有文件
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Full-Monthly-Assets
           path: |
-            yahoo_stock_data.duckdb
-            QC_Update.csv
-            QC_UpdateFailed.csv
-            QC_Empty.csv
-            QC_Full_Report_*.xlsx
+            yahoo_data.duckdb
             llama_index_stock_index/
+            QC_Full_Report_*.xlsx
 
   build-and-push:
     runs-on: ubuntu-latest
@@ -62,7 +54,7 @@ jobs:
       - name: 1. 检出代码
         uses: actions/checkout@v4
       
-      - name: 2. 下载上一步文件
+      - name: 2. 下载上一步生成的数据库和索引
         uses: actions/download-artifact@v4
         with:
           name: Full-Monthly-Assets
@@ -70,6 +62,5 @@ jobs:
       - name: 3. 登录阿里云并推送镜像
         run: |
           echo "${{ secrets.TCR_TOKEN }}" | docker login --username=nick4826144284 ${{ env.REGISTRY }} --password-stdin
-          # 此时 Docker 会把当前目录（含下载回来的 .duckdb 和索引文件夹）全部打入镜像
           docker build -t ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }} .
           docker push ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }}
