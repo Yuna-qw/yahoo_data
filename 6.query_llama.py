@@ -32,21 +32,44 @@ class DBManager:
     def execute_sql_and_fetch(self, query: str) -> pd.DataFrame:
         conn = self.get_connection()
         try:
-            # 1. 获取数据库中所有的物理表名
+            # 1. 获取所有原始股票表名
             tables = conn.execute("SELECT table_name FROM information_schema.tables").fetchall()
-            table_names = [t[0] for t in tables if t[0] not in [VIEW_NAME, 'stock_data']]
+            # 排除掉我们自己生成的视图名
+            table_names = [t[0] for t in tables if t[0] not in [VIEW_NAME, 'stock_data', 'stock_monthly_change']]
 
             if not table_names:
                 raise Exception("数据库中没有任何股票数据表，请先运行下载脚本。")
 
-            # 2. 动态创建一个大表 stock_data
-            union_query = "CREATE OR REPLACE VIEW stock_data AS " + " UNION ALL ".join([
-                f"SELECT UPPER('{name}') as Ticker, 'Global' as Country, CAST(date AS DATE) as Date, open as Open, high as High, low as Low, close as Close, adj_close as \"Adj Close\", volume as Volume FROM \"{name}\""
-                for name in table_names
-            ])
+            # 2. 构造动态视图：将下划线还原为点，并自动打市场标签
+            sql_parts = []
+            for name in table_names:
+                if '_' in name:
+                    parts = name.split('_')
+                    display_ticker = f"{''.join(parts[:-1])}.{parts[-1]}".upper()
+                    # 自动识别市场
+                    suffix = parts[-1].lower()
+                    if suffix in ['sz', 'ss']: country = 'Shanghai_Shenzhen'
+                    elif suffix == 'to': country = 'TSX'
+                    else: country = 'US_Market'
+                else:
+                    display_ticker = name.upper()
+                    country = 'Snp500_Ru1000'
+
+                sql_parts.append(f"""
+                    SELECT 
+                        '{display_ticker}' as Ticker, 
+                        '{country}' as Country, 
+                        CAST(date AS DATE) as Date, 
+                        open as Open, high as High, low as Low, close as Close, 
+                        adj_close as "Adj Close", volume as Volume 
+                    FROM "{name}"
+                """)
+
+            # 合并所有表
+            union_query = f"CREATE OR REPLACE VIEW stock_data AS {' UNION ALL '.join(sql_parts)}"
             conn.execute(union_query)
 
-            # 3. 动态创建分析视图
+            # 3. 创建分析视图
             conn.execute(f"""
                 CREATE OR REPLACE VIEW {VIEW_NAME} AS
                 SELECT *, 
@@ -62,25 +85,11 @@ class DBManager:
                 )
             """)
 
-            # 3. 动态创建分析视图 stock_monthly_change
-            conn.execute(f"""
-                CREATE OR REPLACE VIEW {VIEW_NAME} AS
-                SELECT *, 
-                LAG(Monthly_Close) OVER (PARTITION BY Ticker ORDER BY Month_Start_Date) as Prev_Monthly_Close,
-                (Monthly_Close - LAG(Monthly_Close) OVER (PARTITION BY Ticker ORDER BY Month_Start_Date)) as Monthly_Change_Amt,
-                ((Monthly_Close / NULLIF(LAG(Monthly_Close) OVER (PARTITION BY Ticker ORDER BY Month_Start_Date), 0)) - 1) * 100 as Monthly_Change_Pct
-                FROM (
-                    SELECT Ticker, Country, 
-                           date_trunc('month', CAST(Date AS DATE)) as Month_Start_Date,
-                           LAST(Close) as Monthly_Close
-                    FROM stock_data
-                    GROUP BY Ticker, Country, Month_Start_Date
-                )
-            """)
-
-            if not query.lower().strip().startswith("select"):
-                raise ValueError("只允许执行 SELECT 查询。")
+            # 4. 执行 LLM 生成的查询
             df_result = conn.execute(query).fetchdf()
+            
+            df_result = df_result.fillna(0)
+            
         except Exception as e:
             raise Exception(f"SQL执行失败: {e}")
         finally:
@@ -401,8 +410,3 @@ if __name__ == "__main__":
     query6 = "查询 '000001.SZ' 近一年的最大收盘价 Close。"
     result6 = query_stock_data_with_llm(query6)
     print(result6)
-
-
-
-
-
