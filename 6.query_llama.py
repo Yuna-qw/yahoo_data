@@ -382,15 +382,15 @@ if __name__ == "__main__":
     result1 = query_stock_data_with_llm(query1)
     print(result1)
     
-    query2 = "在 'Shanghai_Shenzhen' 市场中，2025年10月月度涨幅百分比 (Monthly_Change_Pct) 前十？"
+    query2 = "在 'Shanghai_Shenzhen' 市场中，2025年10月月度涨幅百分比 (Monthly_Change_Pct) 第一是哪只股票？"
     result2 = query_stock_data_with_llm(query2)
     print(result2)
 
-    query3 = "查询 'BABA' 股票月度涨幅百分比 (Monthly_Change_Pct) 和日期 (Month_Start_Date) 的最近12条记录。"
+    query3 = "查询 'AA' 股票月度涨幅百分比 (Monthly_Change_Pct) 和日期 (Month_Start_Date) 的最近5条记录。"
     result3 = query_stock_data_with_llm(query3)
     print(result3)
 
-    query4 = "关联stock_data和stock_monthly_change，查询 'PARA' 2025 年的每月收盘价（Close）及该年的月度涨跌幅（Monthly_Change_Pct）"
+    query4 = "关联stock_data和stock_monthly_change，查询 'AEM.TO' 2025 年的每月收盘价（Close）及该年的月度涨跌幅（Monthly_Change_Pct）"
     result4 = query_stock_data_with_llm(query4)
     print(result4)
 
@@ -401,6 +401,7 @@ if __name__ == "__main__":
     query6 = "查询 '000001.SZ' 近一年的最大收盘价 Close。"
     result6 = query_stock_data_with_llm(query6)
     print(result6)
+
 
 
 
