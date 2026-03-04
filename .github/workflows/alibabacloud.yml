@@ -43,7 +43,7 @@ jobs:
         with:
           name: Full-Monthly-Assets
           path: |
-            yahoo_data.duckdb
+            yahoo_stock_data.duckdb
             llama_index_stock_index/
             QC_Full_Report_*.xlsx
 
