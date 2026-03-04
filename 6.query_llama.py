@@ -127,7 +127,7 @@ def initialize_retriever():
     try:
         embeddings = DashScopeEmbeddings(
             model="text-embedding-v2",
-            dashscope_api_key=DASH_SCOPE_API_KEY
+            dashscope_api_key=DASHSCOPE_API_KEY
         )
         vector_store = FAISS.load_local(
             INDEX_PATH,
@@ -390,8 +390,8 @@ if __name__ == "__main__":
     query1 = "查询 '000001.SZ' 最近 6 个月的月度涨跌幅百分比 (Monthly_Change_Pct) 和日期 (Month_Start_Date)。"
     result1 = query_stock_data_with_llm(query1)
     print(result1)
-    
-    query2 = "在 'Shanghai_Shenzhen' 市场中，2025年10月月度涨幅百分比 (Monthly_Change_Pct) 第一是哪只股票？"
+
+    query2 = "查询 '000001.SZ' 近一年的最大收盘价 Close。"
     result2 = query_stock_data_with_llm(query2)
     print(result2)
 
@@ -407,6 +407,5 @@ if __name__ == "__main__":
     result5 = query_stock_data_with_llm(query5)
     print(result5)
 
-    query6 = "查询 '000001.SZ' 近一年的最大收盘价 Close。"
-    result6 = query_stock_data_with_llm(query6)
-    print(result6)
+
+
