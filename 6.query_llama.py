@@ -41,10 +41,26 @@ class DBManager:
 
             # 2. 动态创建一个大表 stock_data
             union_query = "CREATE OR REPLACE VIEW stock_data AS " + " UNION ALL ".join([
-                f"SELECT '{name.upper()}' as Ticker, 'Global' as Country, date as Date, open as Open, high as High, low as Low, close as Close, adj_close as \"Adj Close\", volume as Volume FROM \"{name}\""
+                f"SELECT UPPER('{name}') as Ticker, 'Global' as Country, CAST(date AS DATE) as Date, open as Open, high as High, low as Low, close as Close, adj_close as \"Adj Close\", volume as Volume FROM \"{name}\""
                 for name in table_names
             ])
             conn.execute(union_query)
+
+            # 3. 动态创建分析视图
+            conn.execute(f"""
+                CREATE OR REPLACE VIEW {VIEW_NAME} AS
+                SELECT *, 
+                LAG(Monthly_Close) OVER (PARTITION BY Ticker ORDER BY Month_Start_Date) as Prev_Monthly_Close,
+                (Monthly_Close - LAG(Monthly_Close) OVER (PARTITION BY Ticker ORDER BY Month_Start_Date)) as Monthly_Change_Amt,
+                ((Monthly_Close / NULLIF(LAG(Monthly_Close) OVER (PARTITION BY Ticker ORDER BY Month_Start_Date), 0)) - 1) * 100 as Monthly_Change_Pct
+                FROM (
+                    SELECT Ticker, Country, 
+                           CAST(date_trunc('month', Date) AS DATE) as Month_Start_Date,
+                           LAST(Close) as Monthly_Close
+                    FROM stock_data
+                    GROUP BY Ticker, Country, Month_Start_Date
+                )
+            """)
 
             # 3. 动态创建分析视图 stock_monthly_change
             conn.execute(f"""
@@ -121,22 +137,18 @@ retriever = initialize_retriever()
 
 # Text-to-SQL Chain
 SQL_PROMPT_TEMPLATE = """
-You are a DuckDB expert. Given the table and view schemas and a question, generate the best possible DuckDB query.
+You are a DuckDB expert. Given the table and view schemas, generate the best possible DuckDB query.
 
-The tables and views available are: 'stock_data' and 'stock_monthly_change'.
-- The view 'stock_monthly_change' contains monthly analysis data, based on your schema: (Ticker, Country, Month_Start_Date, Monthly_Close, Prev_Monthly_Close, Monthly_Change_Amt, Monthly_Change_Pct).
-- You MUST use 'stock_monthly_change' for any question involving **monthly change, monthly percentage, or previous month's price**.
+CRITICAL DUCKDB RULES:
+1. DATE FILTERING: Never use 'LIKE' on DATE columns. 
+   - For a specific month: Use "strftime(Month_Start_Date, '%Y-%m') = '2025-10'"
+   - For a specific year: Use "EXTRACT(YEAR FROM Month_Start_Date) = 2025"
+2. CASE INSENSITIVITY: Tickers might be stored in different cases. ALWAYS use "UPPER(Ticker) = UPPER('000001.SZ')" when filtering.
+3. JOINING: If joining 'stock_data' and 'stock_monthly_change', join on UPPER(Ticker).
+4. OUTPUT: Return ONLY the SQL query. No quotes, no explanations.
 
-The table and view schemas are:
 {table_info}
-
-Rules:
-1. ONLY output the DuckDB query. DO NOT include any explanatory text, markdown quotes (```), or comments.
-2. CRITICAL: Column names with spaces MUST be enclosed in double quotes, suchs as "Adj Close".
-3. When filtering by market/region, you MUST use the "Country" column.
-4. CRITICAL: To find the single highest (MAX) value of a column (e.g., Close or Monthly_Change_Pct), you MUST select the Ticker and that column, then use 'ORDER BY [Column] DESC LIMIT 1'. Do not use GROUP BY for this task.
 {rag_context}
-5. **ABSOLUTE CRITICAL OUTPUT RULE:** In all queries that return stock data (especially MAX/MIN or Top N), you **MUST** include the Ticker and the corresponding date field (either "Date" or "Month_Start_Date") in the SELECT clause for clarity.
 
 Question: {question}
 SQL Query:
@@ -389,6 +401,7 @@ if __name__ == "__main__":
     query6 = "查询 '000001.SZ' 近一年的最大收盘价 Close。"
     result6 = query_stock_data_with_llm(query6)
     print(result6)
+
 
 
 
