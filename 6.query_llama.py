@@ -17,10 +17,9 @@ TABLE_NAME = 'stock_data'
 VIEW_NAME = 'stock_monthly_change'
 
 # LLM 和 RAG 配置
-LLM_MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct"
-API_BASE_URL = os.getenv("GROQ_API_BASE", "https://api.groq.com/openai/v1")
-API_KEY = os.getenv("GROQ_API_KEY")
-DASH_SCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
+LLM_MODEL_NAME = "qwen3.5-plus" 
+API_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 INDEX_PATH = "llama_index_stock_index"
 
 
@@ -44,11 +43,11 @@ class DBManager:
 
 db_manager = DBManager()
 
-# LangChain 初始化 (使用 Groq LLM)
+# LangChain 初始化
 llm = ChatOpenAI(
     model=LLM_MODEL_NAME,
     openai_api_base=API_BASE_URL,
-    openai_api_key=API_KEY,
+    openai_api_key=DASHSCOPE_API_KEY,
     temperature=0.0
 )
 
@@ -83,7 +82,7 @@ def initialize_retriever():
         return vector_store.as_retriever(search_kwargs={"k": 3})
     except Exception:
         # 即使加载失败也继续，但 RAG 不起作用
-        print("警告: Faiss 检索器加载失败或索引不存在。请先运行 rag_setup_llama_duckdb.py。")
+        print("警告: Faiss 检索器加载失败或索引不存在。请先运行 rag_setup.py。")
         return None
 
 
@@ -198,7 +197,7 @@ def generate_chart_image(natural_language_query: str, df: pd.DataFrame) -> str:
         file_path = f"{file_name_prefix}_multi_line.png"
 
     elif is_time_series and len(df.columns) >= 2:
-        # 情况 A: 标准单系列时间序列
+        # 标准单系列时间序列
         # 尝试识别日期列和值列
         date_cols = [col for col in df.columns if col in ['Date', 'Month_Start_Date']]
         value_cols = [col for col in df.columns if col not in date_cols and col != 'Ticker']
@@ -331,20 +330,20 @@ def query_stock_data_with_llm(natural_language_query: str):
 
 
 if __name__ == "__main__":
-    print(f"使用的 LLM 模型: {LLM_MODEL_NAME} (Groq)")
+    print(f"使用的 LLM 模型: {LLM_MODEL_NAME}")
     print(f"使用的数据库: DuckDB ({DUCKDB_DB_NAME})")
 
     print("\n" + "=" * 50 + "\n")
 
-    # query1 = "查询 '000001.SZ' 最近 6 个月的月度涨跌幅百分比 (Monthly_Change_Pct) 和日期 (Month_Start_Date)。请生成一张清晰的折线图。"
-    # result1 = query_stock_data_with_llm(query1)
-    # print(result1)
-    #
-    # query2 = "在 'Shanghai_Shenzhen' 市场中，2025年10月月度涨幅百分比 (Monthly_Change_Pct) 前十？请生成一张条形图。"
-    # result2 = query_stock_data_with_llm(query2)
-    # print(result2)
+    query1 = "查询 '000001.SZ' 最近 6 个月的月度涨跌幅百分比 (Monthly_Change_Pct) 和日期 (Month_Start_Date)。"
+    result1 = query_stock_data_with_llm(query1)
+    print(result1)
+    
+    query2 = "在 'Shanghai_Shenzhen' 市场中，2025年10月月度涨幅百分比 (Monthly_Change_Pct) 前十？"
+    result2 = query_stock_data_with_llm(query2)
+    print(result2)
 
-    query3 = "查询 'BABA' 股票月度涨幅百分比 (Monthly_Change_Pct) 和日期 (Month_Start_Date) 的最近12条记录。请生成一张折线图。"
+    query3 = "查询 'BABA' 股票月度涨幅百分比 (Monthly_Change_Pct) 和日期 (Month_Start_Date) 的最近12条记录。"
     result3 = query_stock_data_with_llm(query3)
     print(result3)
 
@@ -356,6 +355,7 @@ if __name__ == "__main__":
     result5 = query_stock_data_with_llm(query5)
     print(result5)
 
-    # query1 = "查询 '000001.SZ' 近一年的最大收盘价 Close。"
-    # result1 = query_stock_data_with_llm(query1)
-    # print(result1)
+    query6 = "查询 '000001.SZ' 近一年的最大收盘价 Close。"
+    result6 = query_stock_data_with_llm(query6)
+    print(result6)
+
