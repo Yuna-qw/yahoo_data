@@ -12,7 +12,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import DashScopeEmbeddings
 
 # 数据库配置 (DuckDB)
-DUCKDB_DB_NAME = 'yahoo_data.duckdb'
+DUCKDB_DB_NAME = 'yahoo_stock_data.duckdb'
 TABLE_NAME = 'stock_data'
 VIEW_NAME = 'stock_monthly_change'
 
@@ -358,4 +358,5 @@ if __name__ == "__main__":
     query6 = "查询 '000001.SZ' 近一年的最大收盘价 Close。"
     result6 = query_stock_data_with_llm(query6)
     print(result6)
+
 
