@@ -16,8 +16,10 @@ RUN pip install --no-cache-dir \
     langchain-openai \
     langchain-community \
     faiss-cpu \
-    matplotlib
+    matplotlib \
+    streamlit \
+    blinker
 
 COPY . .
 
-CMD ["tail", "-f", "/dev/null"]
+CMD ["streamlit", "run", "8.app_ui.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
