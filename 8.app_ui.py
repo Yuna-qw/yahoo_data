@@ -81,29 +81,35 @@ def clean_sql_output(sql_text: str) -> str:
 
 def generate_chart_image(df: pd.DataFrame):
     try:
-        plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial Unicode MS', 'SimHei']
+        # 增加更多兼容性字体
+        plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'Tahoma', 'DejaVu Sans']
+        plt.rcParams['axes.unicode_minus'] = False
     except:
         pass
-    plt.rcParams['axes.unicode_minus'] = False
+        
     fig, ax = plt.subplots(figsize=(10, 4))
+    
+    # 寻找日期列和数值列
     date_col = 'Month_Start_Date' if 'Month_Start_Date' in df.columns else ('Date' if 'Date' in df.columns else None)
-    val_col = 'Monthly_Change_Pct' if 'Monthly_Change_Pct' in df.columns else (
-        'Close' if 'Close' in df.columns else df.columns[-1])
+    val_col = 'Monthly_Change_Pct' if 'Monthly_Change_Pct' in df.columns else ('Close' if 'Close' in df.columns else df.columns[-1])
 
-    if date_col:
+    if date_col and not df.empty:
         df[date_col] = pd.to_datetime(df[date_col])
         df = df.sort_values(date_col)
+        
         if 'Ticker' in df.columns and df['Ticker'].nunique() > 1:
             for ticker, group in df.groupby('Ticker'):
                 ax.plot(group[date_col], group[val_col], marker='o', label=ticker)
             ax.legend()
         else:
-            ax.plot(df[date_col], df[val_col], marker='o', color='#1f77b4')
-        ax.set_title(f"走势图: {val_col}")
+            ax.plot(df[date_col], df[val_col], marker='o', color='#1f77b4', linewidth=2)
+        ax.set_title(f"Stock Analysis Trend: {val_col}")
+        ax.grid(True, linestyle='--', alpha=0.7)
+        
         fig.autofmt_xdate()
         os.makedirs('chart', exist_ok=True)
         path = f"chart/web_chart_{int(time.time())}.png"
-        plt.savefig(path)
+        plt.savefig(path, bbox_inches='tight') # 增加这个参数防止边缘被切
         plt.close(fig)
         return path
     return None
