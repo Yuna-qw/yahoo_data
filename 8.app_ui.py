@@ -167,7 +167,7 @@ if st.button("开始分析", type="primary"):
                     "query": user_input,
                     "sql": sql,
                     "data": df_res.copy(),
-                    "has_chart": "has_chart": is_chart_needed
+                    "has_chart": is_chart_needed
                 }
                 st.session_state['history'].insert(0, new_record)
                 st.session_state['current_display'] = new_record
