@@ -142,56 +142,28 @@ if st.button("开始分析", type="primary"):
     if user_input:
         with st.spinner('AI 正在构造 SQL 并调取数据...'):
             try:
-                # 获取 RAG 上下文
                 context = ""
                 if retriever:
                     docs = retriever.invoke(user_input)
                     context = "\n".join([d.page_content for d in docs])
 
-                # 生成 SQL
                 prompt = f"You are a DuckDB expert. Table: stock_data, View: stock_monthly_change. Rules: Use UPPER(Ticker). Context: {context}. Question: {user_input}. SQL Query:"
                 response = llm.invoke(prompt)
                 sql = clean_sql_output(response.content)
 
-                # 执行数据
                 df_res = db_manager.execute_sql_and_fetch(sql)
 
-                # 存入历史记录
+                # 存入历史并下达显示指令
                 new_record = {
                     "time": time.strftime("%H:%M:%S"),
                     "query": user_input,
                     "sql": sql,
-                    "data": df_res.copy(),  # 存下这张表
-                    "has_chart": any(k in user_input for k in ["画图", "走势", "对比", "chart"])
+                    "data": df_res.copy(),
+                    "has_chart": any(k in user_input for k in ["画图", "图表", "走势", "对比", "chart", "plot"])
                 }
                 st.session_state['history'].insert(0, new_record)
                 st.session_state['current_display'] = new_record
-                st.rerun()
-                
-                # 展示 SQL 详情
-                with st.expander("🛠️ 查看生成的后端 SQL"):
-                    st.code(sql, language="sql")
 
-                if df_res.empty:
-                    st.warning("查询结果为空。")
-                else:
-                    # 识别画图需求
-                    chart_keywords = ["画图", "图表", "走势", "对比", "plot", "chart"]
-                    is_chart_needed = any(k in user_input for k in chart_keywords)
-
-                    if is_chart_needed:
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            st.subheader("📋 数据报表")
-                            st.dataframe(df_res, use_container_width=True)
-                        with c2:
-                            st.subheader("📈 趋势分析")
-                            img_path = generate_chart_image(df_res)
-                            if img_path: st.image(img_path)
-                    else:
-                        st.subheader("📋 查询结果数据")
-                        st.dataframe(df_res, use_container_width=True)
-                
                 st.rerun()
 
             except Exception as e:
