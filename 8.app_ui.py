@@ -12,7 +12,7 @@ from langchain_openai import ChatOpenAI
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import DashScopeEmbeddings
 
-# 1. 基础配置
+# 基础配置
 st.set_page_config(page_title="AI股票查询网页", layout="wide")
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 LLM_MODEL_NAME = "qwen3.5-plus"
@@ -111,12 +111,15 @@ def generate_chart_image(df: pd.DataFrame):
 
 # 界面布局
 st.title("🤖 AI 股票数据查询")
+st.markdown("---")
 
-# 侧边栏记录展示
 with st.sidebar:
     st.header("📊 系统状态")
+    # 显示当前使用的模型
+    st.success(f"模型: {LLM_MODEL_NAME}")
+    
     if retriever:
-        st.success("✅ RAG 知识库已就绪")
+        st.info("✅ RAG 知识库已就绪")
     else:
         st.warning("⚠️ RAG 未加载")
 
@@ -126,21 +129,20 @@ with st.sidebar:
         st.info("暂无查询记录")
     else:
         for idx, item in enumerate(st.session_state['history']):
-            # 用小卡片形式展示
-            with st.expander(f"🕒 {item['time']} - {item['query'][:10]}..."):
-                st.write(f"**指令:** {item['query']}")
-                st.code(item['sql'], language="sql")
-                if st.button("查看此结果", key=f"hist_{idx}"):
-                    st.info("此功能可配合方案三永久存储实现，当前仅供回顾。")
+        with st.expander(f"🕒 {item['time']} - {item['query'][:10]}..."):
+            st.write(f"**指令:** {item['query']}")
+            if st.button("点此回溯结果", key=f"hist_{idx}"):
+                st.session_state['current_display'] = item
+                st.rerun()
 
-# 5. 主交互区
-user_input = st.text_input("💬 请输入查询指令：", placeholder="例如：查询 AAPL 最近六个月涨跌幅并画图")
+# 主交互区
+user_input = st.text_input("💬 请输入您的股票查询指令：", placeholder="想查什么？直接告诉我...")
 
 if st.button("开始分析", type="primary"):
     if user_input:
-        with st.spinner('思考中...'):
+        with st.spinner('AI 正在构造 SQL 并调取数据...'):
             try:
-                # RAG 上下文
+                # 获取 RAG 上下文
                 context = ""
                 if retriever:
                     docs = retriever.invoke(user_input)
@@ -159,36 +161,55 @@ if st.button("开始分析", type="primary"):
                     "time": time.strftime("%H:%M:%S"),
                     "query": user_input,
                     "sql": sql,
-                    "data_count": len(df_res)
+                    "data": df_res.copy(),  # 存下这张表
+                    "has_chart": any(k in user_input for k in ["画图", "走势", "对比", "chart"])
                 }
-                st.session_state['history'].insert(0, new_record)  # 最新的放上面
-
-                # 展示结果
-                with st.expander("🛠️ 查看SQL语句"):
+                st.session_state['history'].insert(0, new_record)
+                st.session_state['current_display'] = new_record
+                st.rerun()
+                
+                # 展示 SQL 详情
+                with st.expander("🛠️ 查看生成的后端 SQL"):
                     st.code(sql, language="sql")
 
                 if df_res.empty:
-                    st.warning("未找到匹配数据。")
+                    st.warning("查询结果为空。")
                 else:
+                    # 识别画图需求
                     chart_keywords = ["画图", "图表", "走势", "对比", "plot", "chart"]
                     is_chart_needed = any(k in user_input for k in chart_keywords)
 
                     if is_chart_needed:
-                        col1, col2 = st.columns(2)
-                        with col1:
+                        c1, c2 = st.columns(2)
+                        with c1:
                             st.subheader("📋 数据报表")
                             st.dataframe(df_res, use_container_width=True)
-                        with col2:
+                        with c2:
                             st.subheader("📈 趋势分析")
-                            img = generate_chart_image(df_res)
-                            if img: st.image(img)
+                            img_path = generate_chart_image(df_res)
+                            if img_path: st.image(img_path)
                     else:
-                        st.subheader("📋 查询结果")
+                        st.subheader("📋 查询结果数据")
                         st.dataframe(df_res, use_container_width=True)
-
+                
                 st.rerun()
 
             except Exception as e:
-                st.error(f"分析失败: {e}")
+                st.error(f"分析出错: {e}")
     else:
         st.warning("请输入指令。")
+
+# 显示历史结果       
+if 'current_display' in st.session_state:
+    curr = st.session_state['current_display']
+    st.markdown(f"### 📋 正在查看：{curr['time']} 的查询结果")
+    
+    if curr['has_chart']:
+        c1, c2 = st.columns(2)
+        with c1:
+            st.dataframe(curr['data'], use_container_width=True)
+        with c2:
+            img_path = generate_chart_image(curr['data'])
+            if img_path: st.image(img_path)
+    else:
+        st.dataframe(curr['data'], use_container_width=True)
