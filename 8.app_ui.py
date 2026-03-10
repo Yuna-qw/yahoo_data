@@ -129,11 +129,11 @@ with st.sidebar:
         st.info("暂无查询记录")
     else:
         for idx, item in enumerate(st.session_state['history']):
-        with st.expander(f"🕒 {item['time']} - {item['query'][:10]}..."):
-            st.write(f"**指令:** {item['query']}")
-            if st.button("点此回溯结果", key=f"hist_{idx}"):
-                st.session_state['current_display'] = item
-                st.rerun()
+            with st.expander(f"🕒 {item['time']} - {item['query'][:10]}..."):
+                st.write(f"**指令:** {item['query']}")
+                if st.button("点此回溯结果", key=f"hist_{idx}"):
+                    st.session_state['current_display'] = item
+                    st.rerun()
 
 # 主交互区
 user_input = st.text_input("💬 请输入您的股票查询指令：", placeholder="想查什么？直接告诉我...")
@@ -201,15 +201,25 @@ if st.button("开始分析", type="primary"):
 
 # 显示历史结果       
 if 'current_display' in st.session_state:
+    st.markdown("---")
     curr = st.session_state['current_display']
     st.markdown(f"### 📋 正在查看：{curr['time']} 的查询结果")
     
-    if curr['has_chart']:
-        c1, c2 = st.columns(2)
-        with c1:
-            st.dataframe(curr['data'], use_container_width=True)
-        with c2:
-            img_path = generate_chart_image(curr['data'])
-            if img_path: st.image(img_path)
+    with st.expander("🛠️ 查看生成的后端 SQL"):
+        st.code(curr['sql'], language="sql")
+    
+    if curr['data'].empty:
+        st.warning("该次查询结果为空。")
     else:
-        st.dataframe(curr['data'], use_container_width=True)
+        if curr['has_chart']:
+            c1, c2 = st.columns(2)
+            with c1:
+                st.subheader("📋 数据报表")
+                st.dataframe(curr['data'], use_container_width=True)
+            with c2:
+                st.subheader("📈 趋势分析")
+                img_path = generate_chart_image(curr['data'])
+                if img_path: st.image(img_path)
+        else:
+            st.subheader("📋 查询结果数据")
+            st.dataframe(curr['data'], use_container_width=True)
