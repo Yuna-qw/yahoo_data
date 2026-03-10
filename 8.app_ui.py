@@ -158,6 +158,8 @@ if st.button("开始分析", type="primary"):
                 sql = clean_sql_output(response.content)
 
                 df_res = db_manager.execute_sql_and_fetch(sql)
+                chart_keywords = ["画图", "图表", "走势", "对比", "图", "plot", "chart", "折线", "柱状"]
+                is_chart_needed = any(k in user_input for k in chart_keywords)
 
                 # 存入历史并下达显示指令
                 new_record = {
@@ -165,7 +167,7 @@ if st.button("开始分析", type="primary"):
                     "query": user_input,
                     "sql": sql,
                     "data": df_res.copy(),
-                    "has_chart": any(k in user_input for k in ["画图", "图表", "走势", "对比", "chart", "plot"])
+                    "has_chart": "has_chart": is_chart_needed
                 }
                 st.session_state['history'].insert(0, new_record)
                 st.session_state['current_display'] = new_record
