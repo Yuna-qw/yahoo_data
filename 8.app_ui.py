@@ -74,7 +74,7 @@ def get_retriever():
 
 
 retriever = get_retriever()
-llm = ChatOpenAI(model=LLM_MODEL_NAME, openai_api_base=DOUBAO_API_KEY, openai_api_key=DASHSCOPE_API_KEY, temperature=0.0)
+llm = ChatOpenAI(model=LLM_MODEL_NAME, openai_api_base=API_BASE_URL, openai_api_key=DOUBAO_API_KEY, temperature=0.0)
 
 
 def clean_sql_output(sql_text: str) -> str:
