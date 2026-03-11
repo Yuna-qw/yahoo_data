@@ -14,7 +14,7 @@ from langchain_community.embeddings import DashScopeEmbeddings
 
 # 基础配置
 st.set_page_config(page_title="AI股票查询网页", layout="wide")
-DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
+DASHSCOPE_API_KEY = os.getenv("DOUBAO_API_KEY")
 LLM_MODEL_NAME = "doubao-seed-1-6"
 API_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 # LLM_MODEL_NAME = "qwen3.5-plus"
