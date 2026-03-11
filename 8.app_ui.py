@@ -195,9 +195,10 @@ if 'current_display' in st.session_state:
         st.warning("该次查询结果为空。")
     else:
         if curr['has_chart']:
+            c1, c2 = st.columns(2)
             with c1:
                 st.subheader("📋 数据报表")
-                st.dataframe(curr['data'], width=None)
+                st.dataframe(curr['data'], use_container_width=True)
             with c2:
                 st.subheader("📈 趋势分析")
                 img_path = generate_chart_image(curr['data'])
