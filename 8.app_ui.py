@@ -198,11 +198,11 @@ if 'current_display' in st.session_state:
             c1, c2 = st.columns(2)
             with c1:
                 st.subheader("📋 数据报表")
-                st.dataframe(curr['data'], use_container_width=True)
+                st.dataframe(curr['data'], width=None)
             with c2:
                 st.subheader("📈 趋势分析")
                 img_path = generate_chart_image(curr['data'])
                 if img_path: st.image(img_path)
         else:
             st.subheader("📋 查询结果数据")
-            st.dataframe(curr['data'], use_container_width=True)
+            st.dataframe(curr['data'], width=None)
