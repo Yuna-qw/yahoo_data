@@ -14,7 +14,8 @@ from langchain_community.embeddings import DashScopeEmbeddings
 
 # 基础配置
 st.set_page_config(page_title="AI股票查询网页", layout="wide")
-DASHSCOPE_API_KEY = os.getenv("DOUBAO_API_KEY")
+DOUBAO_API_KEY = os.getenv("DOUBAO_API_KEY")
+ALIBABA_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 LLM_MODEL_NAME = "doubao-seed-1-6"
 API_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 # LLM_MODEL_NAME = "qwen3.5-plus"
@@ -65,7 +66,7 @@ db_manager = DBManager()
 @st.cache_resource
 def get_retriever():
     try:
-        embeddings = DashScopeEmbeddings(model="text-embedding-v2", dashscope_api_key=DASHSCOPE_API_KEY)
+        embeddings = DashScopeEmbeddings(model="text-embedding-v2", dashscope_api_key=ALIBABA_API_KEY)
         vector_store = FAISS.load_local(INDEX_PATH, embeddings, allow_dangerous_deserialization=True)
         return vector_store.as_retriever(search_kwargs={"k": 3})
     except:
@@ -73,7 +74,7 @@ def get_retriever():
 
 
 retriever = get_retriever()
-llm = ChatOpenAI(model=LLM_MODEL_NAME, openai_api_base=API_BASE_URL, openai_api_key=DASHSCOPE_API_KEY, temperature=0.0)
+llm = ChatOpenAI(model=LLM_MODEL_NAME, openai_api_base=DOUBAO_API_KEY, openai_api_key=DASHSCOPE_API_KEY, temperature=0.0)
 
 
 def clean_sql_output(sql_text: str) -> str:
@@ -111,7 +112,7 @@ def generate_chart_image(df: pd.DataFrame):
         fig.autofmt_xdate()
         os.makedirs('chart', exist_ok=True)
         path = f"chart/web_chart_{int(time.time())}.png"
-        plt.savefig(path, bbox_inches='tight') # 增加这个参数防止边缘被切
+        plt.savefig(path, bbox_inches='tight')
         plt.close(fig)
         return path
     return None
