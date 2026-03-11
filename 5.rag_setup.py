@@ -41,8 +41,7 @@ def setup_rag_index_langchain():
     # 持久化
     print(f"正在保存 FAISS 索引到 {INDEX_PATH}...")
     vector_store.save_local(INDEX_PATH)
-    print("保存成功！现在目录中应该包含 index.faiss 和 index.pkl 了。")
-
+    
 if __name__ == "__main__":
     if not DASHSCOPE_API_KEY:
         print("错误：请先设置 DASHSCOPE_API_KEY 环境变量")
@@ -50,3 +49,4 @@ if __name__ == "__main__":
         start_time = time.time()
         setup_rag_index_langchain()
         print(f"\nFAISS 索引设置完成，总耗时: {time.time() - start_time:.2f} 秒")
+
