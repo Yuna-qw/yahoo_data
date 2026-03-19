@@ -15,8 +15,7 @@ from langchain_community.embeddings import DashScopeEmbeddings
 st.set_page_config(page_title="AI股票查询网页", layout="wide")
 
 # 1. 本地 Ollama 配置
-
-LLM_MODEL_NAME = "qwen3.5:27b" 
+LLM_MODEL_NAME = "llama3.2-vision"
 API_BASE_URL = "http://localhost:11434/v1" 
 LOCAL_OLLAMA_TOKEN = "ollama" 
 
