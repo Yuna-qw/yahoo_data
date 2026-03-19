@@ -78,7 +78,6 @@ def get_retriever():
 
 retriever = get_retriever()
 
-# --- 核心修改：使用本地 ChatOpenAI 连接 Ollama ---
 llm = ChatOpenAI(
     model=LLM_MODEL_NAME, 
     openai_api_base=API_BASE_URL, 
@@ -128,7 +127,7 @@ def generate_chart_image(df: pd.DataFrame):
 
 
 # 界面布局
-st.title("🤖 AI 股票数据查询 (本地 27B 强算力版)")
+st.title("🤖 AI 股票数据查询")
 st.markdown("---")
 
 with st.sidebar:
