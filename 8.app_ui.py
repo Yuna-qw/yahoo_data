@@ -164,7 +164,7 @@ if st.button("开始分析", type="primary"):
                     docs = retriever.invoke(user_input)
                     context = "\n".join([d.page_content for d in docs])
 
-                prompt = f""""You are a DuckDB expert. NEVER use DATE_SUB(). To subtract time, use the syntax: CURRENT_DATE - INTERVAL '3 months'. Ensure all SQL queries strictly follow DuckDB documentation.""""
+                prompt = f"""You are a DuckDB expert. NEVER use DATE_SUB(). To subtract time, use the syntax: CURRENT_DATE - INTERVAL '3 months'. Ensure all SQL queries strictly follow DuckDB documentation."""
 
                 response = llm.invoke(prompt)
                 sql = clean_sql_output(response.content)
