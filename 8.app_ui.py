@@ -12,14 +12,17 @@ from langchain_openai import ChatOpenAI
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import DashScopeEmbeddings
 
-# 基础配置
 st.set_page_config(page_title="AI股票查询网页", layout="wide")
-DOUBAO_API_KEY = os.getenv("DOUBAO_API_KEY")
+
+# 1. 本地 Ollama 配置
+
+LLM_MODEL_NAME = "qwen3.5:27b" 
+API_BASE_URL = "http://localhost:11434/v1" 
+LOCAL_OLLAMA_TOKEN = "ollama" 
+
+# 2. 阿里云的 Key
 ALIBABA_API_KEY = os.getenv("DASHSCOPE_API_KEY")
-LLM_MODEL_NAME = "doubao-seed-1-6"
-API_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
-# LLM_MODEL_NAME = "qwen3.5-plus"
-# API_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
 DUCKDB_DB_NAME = 'yahoo_stock_data.duckdb'
 INDEX_PATH = "llama_index_stock_index"
 
@@ -74,17 +77,24 @@ def get_retriever():
 
 
 retriever = get_retriever()
-llm = ChatOpenAI(model=LLM_MODEL_NAME, openai_api_base=API_BASE_URL, openai_api_key=DOUBAO_API_KEY, temperature=0.0)
+
+# --- 核心修改：使用本地 ChatOpenAI 连接 Ollama ---
+llm = ChatOpenAI(
+    model=LLM_MODEL_NAME, 
+    openai_api_base=API_BASE_URL, 
+    openai_api_key=LOCAL_OLLAMA_TOKEN, 
+    temperature=0.0
+)
 
 
 def clean_sql_output(sql_text: str) -> str:
+    # 针对本地模型可能返回的 Markdown 块进行清理
     sql_text = re.sub(r'```sql\s*|```', '', sql_text, flags=re.IGNORECASE).strip()
     return sql_text.replace('\n', ' ')
 
 
 def generate_chart_image(df: pd.DataFrame):
     try:
-        # 增加更多兼容性字体
         plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'Tahoma', 'DejaVu Sans']
         plt.rcParams['axes.unicode_minus'] = False
     except:
@@ -92,7 +102,6 @@ def generate_chart_image(df: pd.DataFrame):
         
     fig, ax = plt.subplots(figsize=(10, 4))
     
-    # 寻找日期列和数值列
     date_col = 'Month_Start_Date' if 'Month_Start_Date' in df.columns else ('Date' if 'Date' in df.columns else None)
     val_col = 'Monthly_Change_Pct' if 'Monthly_Change_Pct' in df.columns else ('Close' if 'Close' in df.columns else df.columns[-1])
 
@@ -119,13 +128,14 @@ def generate_chart_image(df: pd.DataFrame):
 
 
 # 界面布局
-st.title("🤖 AI 股票数据查询")
+st.title("🤖 AI 股票数据查询 (本地 27B 强算力版)")
 st.markdown("---")
 
 with st.sidebar:
     st.header("📊 系统状态")
-    # 显示当前使用的模型
-    st.success(f"模型: {LLM_MODEL_NAME}")
+    # 显示当前使用的本地模型
+    st.success(f"运行模式: ⚡ 本地推理")
+    st.info(f"当前大脑: {LLM_MODEL_NAME}")
     
     if retriever:
         st.info("✅ RAG 知识库已就绪")
@@ -149,14 +159,22 @@ user_input = st.text_input("💬 请输入您的股票查询指令：", placehol
 
 if st.button("开始分析", type="primary"):
     if user_input:
-        with st.spinner('AI 正在构造 SQL 并调取数据...'):
+        with st.spinner('本地 AI 正在思考并构造 SQL...'):
             try:
                 context = ""
                 if retriever:
                     docs = retriever.invoke(user_input)
                     context = "\n".join([d.page_content for d in docs])
 
-                prompt = f"You are a DuckDB expert. Table: stock_data, View: stock_monthly_change. Rules: Use UPPER(Ticker). Context: {context}. Question: {user_input}. SQL Query:"
+                # 优化 Prompt：明确告知本地模型它是 DuckDB 专家
+                prompt = f"""你是一个 DuckDB 专家。
+数据表名称: stock_data
+视图名称: stock_monthly_change
+规则：Ticker 字段必须使用 UPPER() 函数。
+参考上下文: {context}
+用户指令: {user_input}
+请仅输出 SQL 语句，不要包含多余文字："""
+
                 response = llm.invoke(prompt)
                 sql = clean_sql_output(response.content)
 
@@ -164,7 +182,6 @@ if st.button("开始分析", type="primary"):
                 chart_keywords = ["画图", "图表", "走势", "对比", "图", "plot", "chart", "折线", "柱状"]
                 is_chart_needed = any(k in user_input for k in chart_keywords)
 
-                # 存入历史并下达显示指令
                 new_record = {
                     "time": time.strftime("%H:%M:%S"),
                     "query": user_input,
@@ -182,7 +199,7 @@ if st.button("开始分析", type="primary"):
     else:
         st.warning("请输入指令。")
 
-# 显示历史结果       
+# 显示历史结果        
 if 'current_display' in st.session_state:
     st.markdown("---")
     curr = st.session_state['current_display']
