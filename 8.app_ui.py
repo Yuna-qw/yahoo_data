@@ -164,14 +164,7 @@ if st.button("开始分析", type="primary"):
                     docs = retriever.invoke(user_input)
                     context = "\n".join([d.page_content for d in docs])
 
-                # 优化 Prompt：明确告知本地模型它是 DuckDB 专家
-                prompt = f"""你是一个 DuckDB 专家。
-数据表名称: stock_data
-视图名称: stock_monthly_change
-规则：Ticker 字段必须使用 UPPER() 函数。
-参考上下文: {context}
-用户指令: {user_input}
-请仅输出 SQL 语句，不要包含多余文字："""
+                prompt = f""""You are a DuckDB expert. NEVER use DATE_SUB(). To subtract time, use the syntax: CURRENT_DATE - INTERVAL '3 months'. Ensure all SQL queries strictly follow DuckDB documentation.""""
 
                 response = llm.invoke(prompt)
                 sql = clean_sql_output(response.content)
