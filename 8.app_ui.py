@@ -206,7 +206,7 @@ if 'current_display' in st.session_state:
             c1, c2 = st.columns(2)
             with c1:
                 st.subheader("📋 数据报表")
-                st.dataframe(curr['data'], width=None)
+                st.dataframe(curr['data'], width="stretch")
             with c2:
                 st.subheader("📈 趋势分析")
                 img_path = generate_chart_image(curr['data'])
