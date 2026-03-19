@@ -29,15 +29,16 @@ INDEX_PATH = "llama_index_stock_index"
 if 'history' not in st.session_state:
     st.session_state['history'] = []
 
-
 # 数据库管理类
 class DBManager:
     def get_connection(self):
+        # 增加 read_only=False 确保视图可以创建
         return duckdb.connect(database=DUCKDB_DB_NAME)
 
     def execute_sql_and_fetch(self, query: str) -> pd.DataFrame:
         conn = self.get_connection()
         try:
+            # 自动化视图构建逻辑
             tables = conn.execute("SELECT table_name FROM information_schema.tables").fetchall()
             table_names = [t[0] for t in tables if t[0] not in ['stock_monthly_change', 'stock_data']]
             if table_names:
@@ -47,6 +48,7 @@ class DBManager:
                     display_ticker = f"{''.join(parts[:-1])}.{parts[-1]}".upper() if '_' in name else name.upper()
                     sql_parts.append(
                         f"SELECT '{display_ticker}' as Ticker, CAST(date AS DATE) as Date, open as Open, high as High, low as Low, close as Close, adj_close as \"Adj Close\", volume as Volume FROM \"{name}\"")
+                
                 conn.execute(f"CREATE OR REPLACE VIEW stock_data AS {' UNION ALL '.join(sql_parts)}")
                 conn.execute(f"""
                     CREATE OR REPLACE VIEW stock_monthly_change AS
@@ -58,6 +60,8 @@ class DBManager:
                         FROM stock_data GROUP BY Ticker, Month_Start_Date
                     )
                 """)
+            
+            # 执行 AI 生成的查询
             return conn.execute(query).fetchdf().fillna(0)
         finally:
             conn.close()
@@ -74,7 +78,6 @@ def get_retriever():
     except:
         return None
 
-
 retriever = get_retriever()
 
 llm = ChatOpenAI(
@@ -84,12 +87,23 @@ llm = ChatOpenAI(
     temperature=0.0
 )
 
-
-def clean_sql_output(sql_text: str) -> str:
-    # 针对本地模型可能返回的 Markdown 块进行清理
-    sql_text = re.sub(r'```sql\s*|```', '', sql_text, flags=re.IGNORECASE).strip()
-    return sql_text.replace('\n', ' ')
-
+def clean_sql_output(text: str) -> str:
+    """清理 AI 的废话，只留下 SQL"""
+    # 1. 移除 Markdown 代码块标记
+    text = re.sub(r'```sql\s*|```', '', text, flags=re.IGNORECASE).strip()
+    
+    # 2. 移除常见的 AI 客套话前缀
+    if "SELECT" in text.upper():
+        text = text[text.upper().find("SELECT"):]
+    
+    # 3. 移除反引号和换行
+    text = text.replace('`', '').replace('\n', ' ')
+    
+    # 4. 截断可能的解释文字（通常在分号后面）
+    if ";" in text:
+        text = text.split(";")[0] + ";"
+        
+    return text.strip()
 
 def generate_chart_image(df: pd.DataFrame):
     try:
@@ -113,10 +127,11 @@ def generate_chart_image(df: pd.DataFrame):
             ax.legend()
         else:
             ax.plot(df[date_col], df[val_col], marker='o', color='#1f77b4', linewidth=2)
-        ax.set_title(f"Stock Analysis Trend: {val_col}")
-        ax.grid(True, linestyle='--', alpha=0.7)
         
+        ax.set_title(f"Analysis Trend: {val_col}")
+        ax.grid(True, linestyle='--', alpha=0.7)
         fig.autofmt_xdate()
+        
         os.makedirs('chart', exist_ok=True)
         path = f"chart/web_chart_{int(time.time())}.png"
         plt.savefig(path, bbox_inches='tight')
@@ -124,53 +139,44 @@ def generate_chart_image(df: pd.DataFrame):
         return path
     return None
 
-
 # 界面布局
-st.title("🤖 AI 股票数据查询")
+st.title("🤖 AI 股票数据分析系统")
 st.markdown("---")
 
 with st.sidebar:
-    st.header("📊 系统状态")
-    # 显示当前使用的本地模型
-    st.success(f"运行模式: 本地推理")
-    st.info(f"当前模型: {LLM_MODEL_NAME}")
+    st.header("📊 运行状态")
+    st.success(f"模式: 本地推理")
+    st.info(f"模型: {LLM_MODEL_NAME}")
+    if retriever: st.info("✅ RAG 已就绪")
     
-    if retriever:
-        st.info("✅ RAG 知识库已就绪")
-    else:
-        st.warning("⚠️ RAG 未加载")
-
     st.markdown("---")
-    st.header("📜 最近查询历史")
-    if not st.session_state['history']:
-        st.info("暂无查询记录")
-    else:
-        for idx, item in enumerate(st.session_state['history']):
-            with st.expander(f"🕒 {item['time']} - {item['query'][:10]}..."):
-                st.write(f"**指令:** {item['query']}")
-                if st.button("点此回溯结果", key=f"hist_{idx}"):
-                    st.session_state['current_display'] = item
-                    st.rerun()
+    if st.button("🗑️ 清空历史"):
+        st.session_state['history'] = []
+        st.rerun()
 
 # 主交互区
-user_input = st.text_input("💬 请输入您的股票查询指令：", placeholder="想查什么？直接告诉我...")
+user_input = st.text_input("💬 请输入指令：", placeholder="例如：对比 AAPL 和 TSLA 最近三个月的收盘价走势...")
 
-if st.button("开始分析", type="primary"):
+if st.button("开始执行", type="primary"):
     if user_input:
-        with st.spinner('本地 AI 正在思考并构造 SQL...'):
+        with st.spinner('AI 正在构造 SQL 并检索数据库...'):
             try:
-                context = ""
-                if retriever:
-                    docs = retriever.invoke(user_input)
-                    context = "\n".join([d.page_content for d in docs])
+                # 构建强化版 Prompt
+                final_prompt = f"""你是一个 DuckDB SQL 生成专家。
+【强制要求】：
+1. 只输出 SQL 语句，不要任何解释，不要以 "Here is" 开头。
+2. 严禁使用反引号 `。
+3. 严禁使用 DATE_SUB()。减去时间请使用：CURRENT_DATE - INTERVAL '3 months'。
+4. 表名固定为 stock_data (包含 Ticker, Date, Close 等列) 或 stock_monthly_change。
 
-                prompt = f"""You are a DuckDB expert. NEVER use DATE_SUB(). To subtract time, use the syntax: CURRENT_DATE - INTERVAL '3 months'. Ensure all SQL queries strictly follow DuckDB documentation."""
+用户需求：{user_input}"""
 
-                response = llm.invoke(prompt)
+                response = llm.invoke(final_prompt)
                 sql = clean_sql_output(response.content)
 
                 df_res = db_manager.execute_sql_and_fetch(sql)
-                chart_keywords = ["画图", "图表", "走势", "对比", "图", "plot", "chart", "折线", "柱状"]
+                
+                chart_keywords = ["画图", "图表", "走势", "对比", "图", "plot", "chart"]
                 is_chart_needed = any(k in user_input for k in chart_keywords)
 
                 new_record = {
@@ -182,35 +188,30 @@ if st.button("开始分析", type="primary"):
                 }
                 st.session_state['history'].insert(0, new_record)
                 st.session_state['current_display'] = new_record
-
                 st.rerun()
 
             except Exception as e:
-                st.error(f"分析出错: {e}")
-    else:
-        st.warning("请输入指令。")
+                st.error(f"❌ 分析失败：{e}")
+                if 'sql' in locals(): st.code(sql, language="sql")
 
-# 显示历史结果        
+# 结果展示
 if 'current_display' in st.session_state:
-    st.markdown("---")
     curr = st.session_state['current_display']
-    st.markdown(f"### 📋 正在查看：{curr['time']} 的查询结果")
+    st.markdown(f"#### 🔍 查询结果 ({curr['time']})")
     
-    with st.expander("🛠️ 查看生成的后端 SQL"):
+    with st.expander("🛠️ 查看后端 SQL 指令"):
         st.code(curr['sql'], language="sql")
     
     if curr['data'].empty:
-        st.warning("该次查询结果为空。")
+        st.warning("⚠️ 数据库中未找到符合条件的记录。")
     else:
+        # 修复宽度报错：使用 use_container_width=True
         if curr['has_chart']:
-            c1, c2 = st.columns(2)
+            c1, c2 = st.columns([1, 1])
             with c1:
-                st.subheader("📋 数据报表")
-                st.dataframe(curr['data'], width="stretch")
+                st.dataframe(curr['data'], use_container_width=True)
             with c2:
-                st.subheader("📈 趋势分析")
                 img_path = generate_chart_image(curr['data'])
                 if img_path: st.image(img_path)
         else:
-            st.subheader("📋 查询结果数据")
-            st.dataframe(curr['data'], width=None)
+            st.dataframe(curr['data'], use_container_width=True)
