@@ -133,8 +133,8 @@ st.markdown("---")
 with st.sidebar:
     st.header("📊 系统状态")
     # 显示当前使用的本地模型
-    st.success(f"运行模式: ⚡ 本地推理")
-    st.info(f"当前大脑: {LLM_MODEL_NAME}")
+    st.success(f"运行模式: 本地推理")
+    st.info(f"当前模型: {LLM_MODEL_NAME}")
     
     if retriever:
         st.info("✅ RAG 知识库已就绪")
