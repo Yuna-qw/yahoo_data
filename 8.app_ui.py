@@ -88,19 +88,16 @@ llm = ChatOpenAI(
 )
 
 def clean_sql_output(text: str) -> str:
-    # 1. 移除 Markdown 代码块标记
+    # 移除 Markdown 代码块
     text = re.sub(r'```sql\s*|```', '', text, flags=re.IGNORECASE).strip()
-    
-    # 2. 移除常见的 AI 客套话前缀
-    if "SELECT" in text.upper():
-        text = text[text.upper().find("SELECT"):]
-    
-    # 3. 移除反引号和换行
-    text = text.replace('`', '').replace('\n', ' ')
-    
-    # 4. 截断可能的解释文字（通常在分号后面）
-    if ";" in text:
-        text = text.split(";")[0] + ";"
+    # 提取 SELECT 开始的部分
+    upper_text = text.upper()
+    start_idx = upper_text.find("SELECT")
+    if start_idx != -1:
+        text = text[start_idx:]
+    # 移除反引号和结尾分号后的杂质
+    text = text.replace('`', '').split(';')[0].strip()
+    return text + ";" # 统一补上分号
         
     return text.strip()
 
