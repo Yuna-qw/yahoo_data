@@ -88,7 +88,6 @@ llm = ChatOpenAI(
 )
 
 def clean_sql_output(text: str) -> str:
-    """清理 AI 的废话，只留下 SQL"""
     # 1. 移除 Markdown 代码块标记
     text = re.sub(r'```sql\s*|```', '', text, flags=re.IGNORECASE).strip()
     
@@ -150,9 +149,17 @@ with st.sidebar:
     if retriever: st.info("✅ RAG 已就绪")
     
     st.markdown("---")
-    if st.button("🗑️ 清空历史"):
-        st.session_state['history'] = []
-        st.rerun()
+    st.header("📜 最近查询历史")
+    if not st.session_state['history']:
+        st.info("暂无查询记录")
+    else:
+        for idx, item in enumerate(st.session_state['history']):
+            with st.expander(f"🕒 {item['time']} - {item['query'][:10]}..."):
+                st.write(f"**指令:** {item['query']}")
+                if st.button("点此回溯结果", key=f"hist_{idx}"):
+                    st.session_state['current_display'] = item
+                    st.rerun()
+
 
 # 主交互区
 user_input = st.text_input("💬 请输入指令：", placeholder="例如：对比 AAPL 和 TSLA 最近三个月的收盘价走势...")
