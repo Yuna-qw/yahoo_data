@@ -161,15 +161,20 @@ if st.button("开始执行", type="primary"):
     if user_input:
         with st.spinner('AI 正在构造 SQL 并检索数据库...'):
             try:
-                # 构建强化版 Prompt
-                final_prompt = f"""你是一个 DuckDB SQL 生成专家。
-【强制要求】：
-1. 只输出 SQL 语句，不要任何解释，不要以 "Here is" 开头。
-2. 严禁使用反引号 `。
-3. 严禁使用 DATE_SUB()。减去时间请使用：CURRENT_DATE - INTERVAL '3 months'。
-4. 表名固定为 stock_data (包含 Ticker, Date, Close 等列) 或 stock_monthly_change。
+               final_prompt = f"""你是一个 DuckDB SQL 生成专家，你的任务是将用户需求精准转化为 SQL。
+【数据库结构（Schema）】：
+1. 表 `stock_data`（日线数据）：包含列 [Ticker, Date, Open, High, Low, Close, Volume]
+2. 表 `stock_monthly_change`（月线指标）：包含列 [Ticker, Month_Start_Date, Monthly_Close, Monthly_Change_Pct]
 
-用户需求：{user_input}"""
+【强制执行】：
+1. 纯净输出：只输出 SQL，严禁任何解释性文字（如 "Here is..."），严禁 Markdown 符号。
+2. 语法规范：严禁反引号 `。严禁 DATE_SUB()。
+3. 时间计算：减去时间必须使用标准语法，例如 `CURRENT_DATE - INTERVAL '6 months'`。
+4. **时间过滤（核心）**：如果用户提到“最近 X 个月/年”，必须在 WHERE 子句中包含日期限制。
+   - 针对 `stock_monthly_change` 表，必须使用 `Month_Start_Date` 进行过滤。
+   - 针对 `stock_data` 表，必须使用 `Date` 进行过滤。
+
+【用户需求】：{user_input}"""
 
                 response = llm.invoke(final_prompt)
                 sql = clean_sql_output(response.content)
@@ -205,7 +210,6 @@ if 'current_display' in st.session_state:
     if curr['data'].empty:
         st.warning("⚠️ 数据库中未找到符合条件的记录。")
     else:
-        # 修复宽度报错：使用 use_container_width=True
         if curr['has_chart']:
             c1, c2 = st.columns([1, 1])
             with c1:
